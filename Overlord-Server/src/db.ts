@@ -36,6 +36,15 @@ try {
 try {
   db.run(`ALTER TABLE clients ADD COLUMN ip TEXT`);
 } catch {}
+db.run(
+  `CREATE INDEX IF NOT EXISTS idx_clients_online_last_seen ON clients(online, last_seen DESC);`,
+);
+db.run(
+  `CREATE INDEX IF NOT EXISTS idx_clients_os_last_seen ON clients(os, last_seen DESC);`,
+);
+db.run(
+  `CREATE INDEX IF NOT EXISTS idx_clients_ping_ms ON clients(ping_ms);`,
+);
 
 db.run(`
   CREATE TABLE IF NOT EXISTS banned_ips (
@@ -319,6 +328,68 @@ export function listClients(filters: ListFilters): ListResult {
   }));
 
   return { page, pageSize, total: totalRow.c, online: onlineRow.c, items };
+}
+
+export type ClientMetricsSummary = {
+  total: number;
+  online: number;
+  byOS: Record<string, number>;
+  byCountry: Record<string, number>;
+  byOSOnline: Record<string, number>;
+  byCountryOnline: Record<string, number>;
+};
+
+export function getClientMetricsSummary(): ClientMetricsSummary {
+  const counts = db
+    .query<{ total: number; online: number }>(
+      `SELECT COUNT(*) as total, SUM(CASE WHEN online=1 THEN 1 ELSE 0 END) as online FROM clients`,
+    )
+    .get() ?? { total: 0, online: 0 };
+
+  const osRows = db
+    .query<{ key: string; total: number; online: number }>(
+      `SELECT
+         COALESCE(NULLIF(os, ''), 'unknown') as key,
+         COUNT(*) as total,
+         SUM(CASE WHEN online=1 THEN 1 ELSE 0 END) as online
+       FROM clients
+       GROUP BY COALESCE(NULLIF(os, ''), 'unknown')`,
+    )
+    .all();
+
+  const countryRows = db
+    .query<{ key: string; total: number; online: number }>(
+      `SELECT
+         COALESCE(NULLIF(country, ''), 'ZZ') as key,
+         COUNT(*) as total,
+         SUM(CASE WHEN online=1 THEN 1 ELSE 0 END) as online
+       FROM clients
+       GROUP BY COALESCE(NULLIF(country, ''), 'ZZ')`,
+    )
+    .all();
+
+  const byOS: Record<string, number> = {};
+  const byOSOnline: Record<string, number> = {};
+  for (const row of osRows) {
+    byOS[row.key] = Number(row.total) || 0;
+    byOSOnline[row.key] = Number(row.online) || 0;
+  }
+
+  const byCountry: Record<string, number> = {};
+  const byCountryOnline: Record<string, number> = {};
+  for (const row of countryRows) {
+    byCountry[row.key] = Number(row.total) || 0;
+    byCountryOnline[row.key] = Number(row.online) || 0;
+  }
+
+  return {
+    total: Number(counts.total) || 0,
+    online: Number(counts.online) || 0,
+    byOS,
+    byCountry,
+    byOSOnline,
+    byCountryOnline,
+  };
 }
 
 export type AutoScriptTrigger = "on_connect" | "on_first_connect" | "on_connect_once";

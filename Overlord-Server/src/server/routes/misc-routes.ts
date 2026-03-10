@@ -1,9 +1,7 @@
 import { authenticateRequest } from "../../auth";
-import * as clientManager from "../../clientManager";
 import { AuditAction, getAuditLogs, logAudit } from "../../auditLog";
 import { getConfig, updateSecurityConfig, updateTlsConfig } from "../../config";
-import { listClients } from "../../db";
-import { logger } from "../../logger";
+import { getClientMetricsSummary } from "../../db";
 import { metrics } from "../../metrics";
 import { requirePermission } from "../../rbac";
 import { runCertbotSetup } from "../certbot-setup";
@@ -34,40 +32,12 @@ export async function handleMiscRoutes(
 
     const snapshot = metrics.getSnapshot();
 
-    const clientList = listClients({ page: 1, pageSize: 10000, search: "", sort: "last_seen_desc" });
-    logger.debug(
-      `[metrics] Database reports: total=${clientList.total}, online=${clientList.online}, items=${clientList.items.length}`,
-    );
-    logger.debug(`[metrics] In-memory clients map size: ${clientManager.getClientCount()}`);
-
-    snapshot.clients.total = clientList.total;
-    snapshot.clients.online = clientList.online;
-    snapshot.clients.offline = clientList.total - clientList.online;
-
-    const byOS: Record<string, number> = {};
-    const byCountry: Record<string, number> = {};
-    const byOSOnline: Record<string, number> = {};
-    const byCountryOnline: Record<string, number> = {};
-    let onlineCounted = 0;
-    const totalItems = clientList.items.length;
-    for (const item of clientList.items) {
-      if (item.os) {
-        byOS[item.os] = (byOS[item.os] || 0) + 1;
-      }
-      if (item.country) {
-        byCountry[item.country] = (byCountry[item.country] || 0) + 1;
-      }
-      if (!item.online) continue;
-      onlineCounted++;
-      if (item.os) {
-        byOSOnline[item.os] = (byOSOnline[item.os] || 0) + 1;
-      }
-      if (item.country) {
-        byCountryOnline[item.country] = (byCountryOnline[item.country] || 0) + 1;
-      }
-    }
-    snapshot.clients.byOS = byOS;
-    snapshot.clients.byCountry = byCountry;
+    const clientSummary = getClientMetricsSummary();
+    snapshot.clients.total = clientSummary.total;
+    snapshot.clients.online = clientSummary.online;
+    snapshot.clients.offline = clientSummary.total - clientSummary.online;
+    snapshot.clients.byOS = clientSummary.byOS;
+    snapshot.clients.byCountry = clientSummary.byCountry;
 
     snapshot.sessions.console = deps.getConsoleSessionCount();
     snapshot.sessions.remoteDesktop = deps.getRdSessionCount();

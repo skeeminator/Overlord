@@ -9,7 +9,7 @@ import { decodeMessage, encodeMessage, type WireMessage } from "../../protocol";
 import * as sessionManager from "../../sessions/sessionManager";
 import type { SocketData } from "../../sessions/types";
 import type { ClientInfo } from "../../types";
-import { handleFrame, handleHello, handlePing, handlePong } from "../../wsHandlers";
+import { clearClientSyncState, handleFrame, handleHello, handlePing, handlePong } from "../../wsHandlers";
 import { getMaxPayloadLimit, getMessageByteLength, isAllowedClientMessageType } from "../../wsValidation";
 
 type PendingScript = {
@@ -326,12 +326,12 @@ export function handleWebSocketClose(
     for (const [sid, sess] of sessionManager.getAllRdSessions().entries()) {
       if (sess.viewer === ws) {
         removedClientId = sess.clientId;
-        sessionManager.getAllRdSessions().delete(sid);
+        sessionManager.deleteRdSession(sid);
         break;
       }
     }
 
-    const stillViewing = Array.from(sessionManager.getAllRdSessions().values()).some((s) => s.clientId === removedClientId);
+    const stillViewing = sessionManager.hasRdSessionsForClient(removedClientId);
     if (!stillViewing) {
       const target = clientManager.getClient(removedClientId);
       deps.sendDesktopCommand(target, "desktop_stop", {});
@@ -346,12 +346,12 @@ export function handleWebSocketClose(
     for (const [sid, sess] of sessionManager.getAllWebcamSessions().entries()) {
       if (sess.viewer === ws) {
         removedClientId = sess.clientId;
-        sessionManager.getAllWebcamSessions().delete(sid);
+        sessionManager.deleteWebcamSession(sid);
         break;
       }
     }
 
-    const stillViewing = Array.from(sessionManager.getAllWebcamSessions().values()).some((s) => s.clientId === removedClientId);
+    const stillViewing = sessionManager.hasWebcamSessionsForClient(removedClientId);
     if (!stillViewing) {
       const target = clientManager.getClient(removedClientId);
       deps.sendDesktopCommand(target, "webcam_stop", {});
@@ -366,12 +366,12 @@ export function handleWebSocketClose(
     for (const [sid, sess] of sessionManager.getAllHvncSessions().entries()) {
       if (sess.viewer === ws) {
         removedClientId = sess.clientId;
-        sessionManager.getAllHvncSessions().delete(sid);
+        sessionManager.deleteHvncSession(sid);
         break;
       }
     }
 
-    const stillViewing = Array.from(sessionManager.getAllHvncSessions().values()).some((s) => s.clientId === removedClientId);
+    const stillViewing = sessionManager.hasHvncSessionsForClient(removedClientId);
     if (!stillViewing) {
       const target = clientManager.getClient(removedClientId);
       if (target) {
@@ -424,6 +424,7 @@ export function handleWebSocketClose(
   }
 
   clientManager.deleteClient(clientId);
+  clearClientSyncState(clientId);
   deps.notifyConsoleClosed(clientId, "Client disconnected");
   setOnlineState(clientId, false);
   deps.clearPendingNotificationScreenshots(clientId);

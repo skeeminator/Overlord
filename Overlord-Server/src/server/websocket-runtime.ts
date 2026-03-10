@@ -27,8 +27,12 @@ export function createWebSocketRuntime<TLifecycleDeps>(deps: {
   handleWebSocketMessage: MessageHandler<TLifecycleDeps>;
   handleWebSocketClose: CloseHandler<TLifecycleDeps>;
 }) {
+  const wsDeflateEnabled = String(process.env.OVERLORD_WS_PERMESSAGE_DEFLATE || "true")
+    .trim()
+    .toLowerCase() !== "false";
+
   return {
-    perMessageDeflate: true,
+    perMessageDeflate: wsDeflateEnabled,
     maxPayloadLength: Math.max(deps.maxClientPayloadBytes, deps.maxViewerPayloadBytes),
     idleTimeout: 255,
     sendPings: true,

