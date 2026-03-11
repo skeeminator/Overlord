@@ -128,11 +128,13 @@ export function handlePong(info: ClientInfo, payload: WireMessage) {
   }
 
   const rtt = now - info.lastPingSent;
+  const nowTs = Date.now();
+
+  info.lastSeen = nowTs;
+  info.online = true;
+  info.lastPingNonce = undefined;
 
   if (rtt >= 0 && rtt < maxRttMs) {
-    const nowTs = Date.now();
-    info.lastSeen = nowTs;
-    info.online = true;
     info.pingMs = rtt;
     if (shouldSyncClientToDb(info.id, nowTs)) {
       upsertClientRow({
@@ -144,8 +146,14 @@ export function handlePong(info: ClientInfo, payload: WireMessage) {
     }
 
     metrics.recordPing(rtt);
-    info.lastPingNonce = undefined;
   } else {
+    if (shouldSyncClientToDb(info.id, nowTs)) {
+      upsertClientRow({
+        id: info.id,
+        lastSeen: info.lastSeen,
+        online: 1,
+      });
+    }
   }
 }
 
