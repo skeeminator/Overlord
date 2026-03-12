@@ -29,8 +29,8 @@
 #define _REFLECTIVEDLLINJECTION_REFLECTIVELOADER_H
 //===============================================================================================//
 #define WIN32_LEAN_AND_MEAN
+#include <winsock2.h>
 #include <windows.h>
-#include <Winsock2.h>
 #include <intrin.h>
 
 #include "ReflectiveDLLInjection.h"
