@@ -74,6 +74,8 @@ fetch_minhook() {
   cp -f "$tmpdir/minhook/src/hde/table64.h" "$MINHOOK_DIR/hde/" 2>/dev/null || true
   cp -f "$tmpdir/minhook/src/hde/table32.h" "$MINHOOK_DIR/hde/" 2>/dev/null || true
   cp -f "$tmpdir/minhook/include/MinHook.h" "$MINHOOK_DIR/" 2>/dev/null || true
+  mkdir -p "$SRC_DIR/include"
+  cp -f "$tmpdir/minhook/include/MinHook.h" "$SRC_DIR/include/MinHook.h" 2>/dev/null || true
   rm -rf "$tmpdir"
 
   [ -f "$MINHOOK_DIR/hook.c" ]
@@ -102,6 +104,15 @@ if [ -d "$MINHOOK_DIR" ] && { [ -f "$MINHOOK_DIR/hook.c" ] || [ -f "$MINHOOK_DIR
   MINHOOK_OBJS=""
   MINHOOK_LIB=""
   MINHOOK_INC="-I$MINHOOK_DIR -I$MINHOOK_DIR/hde"
+
+  if [ -f "$MINHOOK_DIR/hook.c" ] && [ ! -f "$SRC_DIR/include/MinHook.h" ]; then
+    mkdir -p "$SRC_DIR/include"
+    if [ -f "$MINHOOK_DIR/MinHook.h" ]; then
+      cp -f "$MINHOOK_DIR/MinHook.h" "$SRC_DIR/include/MinHook.h"
+    elif [ -f "$MINHOOK_DIR/include/MinHook.h" ]; then
+      cp -f "$MINHOOK_DIR/include/MinHook.h" "$SRC_DIR/include/MinHook.h"
+    fi
+  fi
 
   for src in "$MINHOOK_DIR"/buffer.c "$MINHOOK_DIR"/trampoline.c \
              "$MINHOOK_DIR"/hde/hde64.c "$MINHOOK_DIR"/hde/hde32.c \
