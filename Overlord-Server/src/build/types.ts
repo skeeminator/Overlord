@@ -22,4 +22,14 @@ export type BuildConfig = {
   persistenceMethod?: string;
   hideConsole?: boolean;
   noPrinting?: boolean;
+  outputName?: string;
+  garbleLiterals?: boolean;
+  garbleTiny?: boolean;
+  garbleSeed?: string;
+  assemblyTitle?: string;
+  assemblyProduct?: string;
+  assemblyCompany?: string;
+  assemblyVersion?: string;
+  assemblyCopyright?: string;
+  iconBase64?: string;
 };
