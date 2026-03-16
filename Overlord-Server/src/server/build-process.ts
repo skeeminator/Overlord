@@ -413,70 +413,90 @@ export async function startBuildProcess(
       }
 
       if (hasWinres) {
-        sendToStream({ type: "output", text: `Using go-winres: ${winresBin}\n`, level: "info" });
-        winresTempDir = path.join(outDir, `.winres-${buildId.substring(0, 8)}`);
-        fs.mkdirSync(winresTempDir, { recursive: true });
+        const agentDir = path.join(clientDir, "cmd", "agent");
+        const winresLockPath = path.join(agentDir, ".winres.lock");
 
-        const winresConfig: any = {};
-
-        if (config.iconBase64) {
+        if (fs.existsSync(winresLockPath)) {
+          sendToStream({
+            type: "output",
+            text: "WARNING: Another build is currently generating Windows resources for this client. Skipping winres for this build.\n",
+            level: "warn",
+          });
+        } else {
+          // Acquire a simple lock so only one build at a time touches cmd/agent/*.syso
+          fs.writeFileSync(winresLockPath, String(process.pid));
           try {
-            const iconBuffer = Buffer.from(config.iconBase64, "base64");
-            const iconPath = path.join(winresTempDir, "icon.ico");
-            fs.writeFileSync(iconPath, iconBuffer);
-            winresConfig["RT_GROUP_ICON"] = { "#1": { "0000": "icon.ico" } };
-            sendToStream({ type: "output", text: `Icon embedded (${iconBuffer.length} bytes)\n`, level: "info" });
-          } catch (iconErr: any) {
-            sendToStream({ type: "output", text: `WARNING: Failed to process icon: ${iconErr.message}. Skipping icon.\n`, level: "warn" });
-          }
-        }
+            sendToStream({ type: "output", text: `Using go-winres: ${winresBin}\n`, level: "info" });
+            winresTempDir = path.join(outDir, `.winres-${buildId.substring(0, 8)}`);
+            fs.mkdirSync(winresTempDir, { recursive: true });
 
-        const versionStr = config.assemblyVersion || "0.0.0.0";
-        const versionInfo: any = {
-          "0409": {
-            "FileDescription": config.assemblyTitle || "",
-            "ProductName": config.assemblyProduct || "",
-            "CompanyName": config.assemblyCompany || "",
-            "FileVersion": versionStr,
-            "ProductVersion": versionStr,
-            "LegalCopyright": config.assemblyCopyright || "",
-            "OriginalFilename": config.outputName ? (config.outputName + ".exe") : "",
-          },
-        };
+            const winresConfig: any = {};
 
-        winresConfig["RT_VERSION"] = {
-          "#1": {
-            "0000": {
-              "fixed": {
-                "file_version": versionStr,
-                "product_version": versionStr,
-              },
-              "info": versionInfo,
-            },
-          },
-        };
-
-        const winresJsonPath = path.join(winresTempDir, "winres.json");
-        fs.writeFileSync(winresJsonPath, JSON.stringify(winresConfig, null, 2));
-        sendToStream({ type: "output", text: `Winres config: ${winresJsonPath}\n`, level: "info" });
-
-        const sysoOutPrefix = path.join(clientDir, "cmd", "agent", "rsrc");
-        try {
-          const winresResult = await $`${winresBin} make --in ${winresJsonPath} --out ${sysoOutPrefix}`.cwd(winresTempDir).nothrow().quiet();
-          if (winresResult.exitCode !== 0) {
-            const stderr = winresResult.stderr.toString().trim();
-            sendToStream({ type: "output", text: `WARNING: go-winres failed (exit ${winresResult.exitCode}): ${stderr}\nBuilding without assembly data.\n`, level: "warn" });
-          } else {
-            const agentDir = path.join(clientDir, "cmd", "agent");
-            for (const f of fs.readdirSync(agentDir)) {
-              if (f.startsWith("rsrc") && f.endsWith(".syso")) {
-                generatedSysoFiles.push(path.join(agentDir, f));
+            if (config.iconBase64) {
+              try {
+                const iconBuffer = Buffer.from(config.iconBase64, "base64");
+                const iconPath = path.join(winresTempDir, "icon.ico");
+                fs.writeFileSync(iconPath, iconBuffer);
+                winresConfig["RT_GROUP_ICON"] = { "#1": { "0000": "icon.ico" } };
+                sendToStream({ type: "output", text: `Icon embedded (${iconBuffer.length} bytes)\n`, level: "info" });
+              } catch (iconErr: any) {
+                sendToStream({ type: "output", text: `WARNING: Failed to process icon: ${iconErr.message}. Skipping icon.\n`, level: "warn" });
               }
             }
-            sendToStream({ type: "output", text: `Windows resources generated (${generatedSysoFiles.length} .syso files)\n`, level: "info" });
+
+            const versionStr = config.assemblyVersion || "0.0.0.0";
+            const versionInfo: any = {
+              "0409": {
+                "FileDescription": config.assemblyTitle || "",
+                "ProductName": config.assemblyProduct || "",
+                "CompanyName": config.assemblyCompany || "",
+                "FileVersion": versionStr,
+                "ProductVersion": versionStr,
+                "LegalCopyright": config.assemblyCopyright || "",
+                "OriginalFilename": config.outputName ? (config.outputName + ".exe") : "",
+              },
+            };
+
+            winresConfig["RT_VERSION"] = {
+              "#1": {
+                "0000": {
+                  "fixed": {
+                    "file_version": versionStr,
+                    "product_version": versionStr,
+                  },
+                  "info": versionInfo,
+                },
+              },
+            };
+
+            const winresJsonPath = path.join(winresTempDir, "winres.json");
+            fs.writeFileSync(winresJsonPath, JSON.stringify(winresConfig, null, 2));
+            sendToStream({ type: "output", text: `Winres config: ${winresJsonPath}\n`, level: "info" });
+
+            const sysoOutPrefix = path.join(agentDir, "rsrc");
+            try {
+              const winresResult = await $`${winresBin} make --in ${winresJsonPath} --out ${sysoOutPrefix}`.cwd(winresTempDir).nothrow().quiet();
+              if (winresResult.exitCode !== 0) {
+                const stderr = winresResult.stderr.toString().trim();
+                sendToStream({ type: "output", text: `WARNING: go-winres failed (exit ${winresResult.exitCode}): ${stderr}\nBuilding without assembly data.\n`, level: "warn" });
+              } else {
+                for (const f of fs.readdirSync(agentDir)) {
+                  if (f.startsWith("rsrc") && f.endsWith(".syso")) {
+                    generatedSysoFiles.push(path.join(agentDir, f));
+                  }
+                }
+                sendToStream({ type: "output", text: `Windows resources generated (${generatedSysoFiles.length} .syso files)\n`, level: "info" });
+              }
+            } catch (winresErr: any) {
+              sendToStream({ type: "output", text: `WARNING: go-winres failed: ${winresErr.message || winresErr}. Building without assembly data.\n`, level: "warn" });
+            }
+          } finally {
+            try {
+              fs.unlinkSync(winresLockPath);
+            } catch {
+              // ignore errors removing the lock
+            }
           }
-        } catch (winresErr: any) {
-          sendToStream({ type: "output", text: `WARNING: go-winres failed: ${winresErr.message || winresErr}. Building without assembly data.\n`, level: "warn" });
         }
       }
     }
