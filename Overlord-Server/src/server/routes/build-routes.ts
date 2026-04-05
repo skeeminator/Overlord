@@ -147,9 +147,16 @@ export async function handleBuildRoutes(
           : ['startup'];
       if (safePersistenceMethods.length === 0) safePersistenceMethods.push('startup');
       const safeStartupName =
-        typeof startupName === 'string' && /^[A-Za-z0-9_-]{1,32}$/.test(startupName.trim())
+        typeof startupName === 'string' && /^[A-Za-z0-9_.-]{1,64}$/.test(startupName.trim())
           ? startupName.trim()
           : undefined;
+      const hasDarwinTarget = allowedPlatforms.some((p) => p.startsWith('darwin-'));
+      if (hasDarwinTarget && safeStartupName && !safeStartupName.startsWith('com.')) {
+        return Response.json(
+          { error: 'Startup name for macOS must start with "com." (e.g. com.apple.updater)' },
+          { status: 400 },
+        );
+      }
       const safeOutputName = typeof outputName === "string" && /^[A-Za-z0-9._-]{1,64}$/.test(outputName.trim())
         ? outputName.trim()
         : undefined;
