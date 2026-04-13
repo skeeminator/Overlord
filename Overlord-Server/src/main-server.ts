@@ -12,7 +12,7 @@ import { v4 as uuidv4 } from "uuid";
 import { authenticateRequest } from "./auth";
 import { loadConfig, getConfig } from "./config";
 import { flushAuditLogsSync } from "./auditLog";
-import { getUserById, getUsersForNotificationDeliveryByClient, canUserAccessClient, setUserClientAccessRule, setUserClientAccessScope, getUserClientAccessScope } from "./users";
+import { getUserById, getUsersForNotificationDelivery, getUsersForNotificationDeliveryByClient, canUserAccessClient, setUserClientAccessRule, setUserClientAccessScope, getUserClientAccessScope } from "./users";
 import { requireAuth, requirePermission } from "./rbac";
 import { metrics } from "./metrics";
 import { ensureDataDir } from "./paths";
@@ -282,6 +282,25 @@ const notificationPluginHandlers = createNotificationPluginHandlers({
   getUserRole: (userId: number) => getUserById(userId)?.role,
   storeNotificationScreenshot: storeNotificationScreenshotForPending,
   deliverNotificationWithScreenshot: deliverNotificationWithScreenshotForRecord,
+  getDeliveryTargetsForClientEvent: (event: string, clientId: string): UserDeliveryTarget[] => {
+    const mapRow = (u: any): UserDeliveryTarget => ({
+      userId: u.id,
+      username: u.username,
+      webhookEnabled: u.webhook_enabled === 1,
+      webhookUrl: u.webhook_url || "",
+      webhookTemplate: u.webhook_template,
+      telegramEnabled: u.telegram_enabled === 1,
+      telegramBotToken: u.telegram_bot_token || "",
+      telegramChatId: u.telegram_chat_id || "",
+      telegramTemplate: u.telegram_template,
+    });
+    if (event === "client_purgatory") {
+      return getUsersForNotificationDelivery()
+        .filter((u) => u.role === "admin" || u.role === "operator")
+        .map(mapRow);
+    }
+    return getUsersForNotificationDeliveryByClient(clientId).map(mapRow);
+  },
   savePluginState,
 });
 

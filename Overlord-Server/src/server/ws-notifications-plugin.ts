@@ -7,7 +7,7 @@ import { metrics } from "../metrics";
 import { encodeMessage } from "../protocol";
 import * as sessionManager from "../sessions/sessionManager";
 import type { SocketData } from "../sessions/types";
-import { deliverWebPushClientEvent } from "./notification-delivery";
+import { deliverWebPushClientEvent, deliverClientEventToExternalChannels, type UserDeliveryTarget } from "./notification-delivery";
 
 type NotificationRecord = {
   id: string;
@@ -65,6 +65,10 @@ type CreateDeps = {
     height?: number,
   ) => void;
   deliverNotificationWithScreenshot: (record: NotificationRecord) => Promise<void>;
+  getDeliveryTargetsForClientEvent: (
+    event: string,
+    clientId: string,
+  ) => UserDeliveryTarget[];
   savePluginState: () => Promise<void>;
 };
 
@@ -354,6 +358,9 @@ export function createNotificationPluginHandlers(deps: CreateDeps) {
       }
 
       void deliverWebPushClientEvent(event, info, deps.canUserAccessClient, deps.getUserRole);
+
+      const externalTargets = deps.getDeliveryTargetsForClientEvent(event, info.id);
+      void deliverClientEventToExternalChannels(event, info, externalTargets);
     },
 
     markPluginLoaded,
