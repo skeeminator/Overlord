@@ -22,6 +22,8 @@ Hello, I made this project for fun.
 
 If you just want it running fast, use this.
 
+> **⚠️ The compose file below is for Linux ONLY.** If you are on **Windows** or **macOS**, use `docker-compose.windows.yml` instead. See [Docker Install By OS](#docker-install-by-os) for the correct commands.
+
 1. Create a `docker-compose.yml` file and paste this:
 
 ```yaml
@@ -233,6 +235,20 @@ Start Docker Desktop once, then verify:
 ```bash
 docker --version
 docker compose version
+```
+
+> **macOS users:** use `docker-compose.windows.yml` instead of the default `docker-compose.yml`. The Windows/macOS compose file is pre-configured for Docker Desktop (no `network_mode: host`, correct volume paths, etc.).
+
+Clone the repo or download the files, then run:
+
+```bash
+docker compose -f docker-compose.windows.yml up -d
+```
+
+To rebuild after an update:
+
+```bash
+docker compose -f docker-compose.windows.yml up --build -d
 ```
 
 ## No Docker (.bat / .sh)

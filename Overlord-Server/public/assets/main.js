@@ -198,7 +198,7 @@ function applyMenuSupportRules(clientId) {
 
   const elevateBtn = menu.querySelector('[data-action="elevate"]');
   if (elevateBtn) {
-    elevateBtn.style.display = platform === "darwin" ? "" : "none";
+    elevateBtn.style.display = platform === "mac" ? "" : "none";
   }
 }
 
@@ -954,6 +954,10 @@ menu.addEventListener("click", async (e) => {
       const data = await res.json().catch(() => ({}));
       if (data.ok) {
         alert(data.message || "Elevation successful — client will reconnect as root.");
+        // Stagger thumbnail requests to catch the client after it reconnects
+        setTimeout(() => requestThumbnail(contextCard), 5000);
+        setTimeout(() => requestThumbnail(contextCard), 10000);
+        setTimeout(() => requestThumbnail(contextCard), 18000);
       } else {
         alert(data.error || data.message || "Elevation failed.");
       }
@@ -961,7 +965,7 @@ menu.addEventListener("click", async (e) => {
       alert("Elevation request failed: " + err.message);
     }
     closeMenu(clearContext);
-    setTimeout(() => loadWithOptions({ force: true }), 2000);
+    setTimeout(() => loadWithOptions({ force: true }), 5000);
     return;
   }
 

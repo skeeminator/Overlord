@@ -83,6 +83,7 @@ import { encodeMsgpack, decodeMsgpack } from "./msgpack-helpers.js";
   let clipboardSyncTimer = null;
   let lastClipboardText = "";
   let clipboardSyncActive = false;
+  let elevationPending = false;
 
   function resetH264RuntimeState() {
     h264TimestampUs = 0;
@@ -269,6 +270,7 @@ import { encodeMsgpack, decodeMsgpack } from "./msgpack-helpers.js";
     offlineTimer = setTimeout(() => {
       const now = performance.now();
       if (!lastFrameAt || now - lastFrameAt > 3000) {
+        if (elevationPending) return;
         desiredStreaming = false;
         setStreamState("offline", reason || "Client offline");
       }
@@ -302,6 +304,10 @@ import { encodeMsgpack, decodeMsgpack } from "./msgpack-helpers.js";
     }
     if (msg.status === "online") {
       clearOfflineTimer();
+      if (elevationPending) {
+        elevationPending = false;
+        desiredStreaming = true;
+      }
       if (desiredStreaming) {
         setStreamState("starting", "Reconnecting");
         if (displaySelect && displaySelect.value !== undefined) {
@@ -395,7 +401,8 @@ import { encodeMsgpack, decodeMsgpack } from "./msgpack-helpers.js";
               statusDiv.className = "text-xs text-emerald-400";
             }
             elevateBtn.textContent = "Done";
-            // The client will disconnect and reconnect; the viewer should auto-recover
+            elevationPending = true;
+            desiredStreaming = true;
           } else {
             if (statusDiv) {
               statusDiv.textContent = `Elevation failed: ${data.message || "Unknown error"}`;
