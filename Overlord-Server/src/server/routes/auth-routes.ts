@@ -15,6 +15,7 @@ import {
   hashTokenForSession,
   persistRevokedTokenHash,
   getSessionById,
+  deleteInactiveSessions,
 } from "../../db";
 import { logger } from "../../logger";
 import {
@@ -185,6 +186,27 @@ export async function handleAuthRoutes(
         current: s.tokenHash === currentTokenHash,
       })),
     });
+  }
+
+  if (req.method === "DELETE" && url.pathname === "/api/sessions/inactive") {
+    const user = await authenticateRequest(req);
+    if (!user) {
+      return Response.json({ error: "Not authenticated" }, { status: 401 });
+    }
+
+    const removed = deleteInactiveSessions(user.userId);
+
+    const ip = server.requestIP(req)?.address || "unknown";
+    logAudit({
+      timestamp: Date.now(),
+      username: user.username,
+      ip,
+      action: AuditAction.LOGOUT,
+      details: `Removed ${removed} inactive session(s)`,
+      success: true,
+    });
+
+    return Response.json({ ok: true, removed });
   }
 
   if (req.method === "GET" && url.pathname.match(/^\/api\/users\/\d+\/sessions$/)) {

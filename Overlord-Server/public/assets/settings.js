@@ -830,6 +830,7 @@ async function wipeOfflineClients() {
 const sessionsTableBody = document.getElementById("sessions-table-body");
 const sessionsMessage = document.getElementById("sessions-message");
 const refreshSessionsBtn = document.getElementById("refresh-sessions-btn");
+const removeInactiveSessionsBtn = document.getElementById("remove-inactive-sessions-btn");
 
 function parseUserAgent(ua) {
   if (!ua) return "Unknown";
@@ -905,7 +906,7 @@ async function loadSessions() {
         <tr>
           <td class="px-3 py-2 font-mono text-xs text-slate-100">${escapeHtml(s.ip || "—")}</td>
           <td class="px-3 py-2 text-slate-300 text-xs max-w-[200px] truncate" title="${escapeHtml(s.userAgent || "")}">${escapeHtml(parseUserAgent(s.userAgent))}</td>
-          <td class="px-3 py-2 text-slate-400 text-xs">${formatDate(s.createdAt)}</td>
+          <td class="px-3 py-2 text-slate-400 text-xs">${formatDate(s.createdAt * 1000)}</td>
           <td class="px-3 py-2 text-slate-400 text-xs">${formatRelativeTime(s.lastActivity)}</td>
           <td class="px-3 py-2 text-xs">${statusLabel}${currentBadge}</td>
           <td class="px-3 py-2 text-right">
@@ -972,6 +973,32 @@ async function handleRevokeSessionClick(event) {
   }
 }
 
+async function handleRemoveInactiveSessions() {
+  if (!confirm("Remove all expired and revoked sessions?")) return;
+
+  if (removeInactiveSessionsBtn) removeInactiveSessionsBtn.disabled = true;
+
+  try {
+    const res = await fetch("/api/sessions/inactive", {
+      method: "DELETE",
+      credentials: "include",
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      showSessionsMessage(data.error || "Failed to remove inactive sessions", "error");
+      return;
+    }
+
+    showSessionsMessage(`Removed ${data.removed || 0} inactive session(s)`);
+    await loadSessions();
+  } catch {
+    showSessionsMessage("Request failed", "error");
+  } finally {
+    if (removeInactiveSessionsBtn) removeInactiveSessionsBtn.disabled = false;
+  }
+}
+
 async function init() {
   try {
     await loadCurrentUser();
@@ -1020,6 +1047,7 @@ async function init() {
 
     await loadSessions();
     if (refreshSessionsBtn) refreshSessionsBtn.addEventListener("click", loadSessions);
+    if (removeInactiveSessionsBtn) removeInactiveSessionsBtn.addEventListener("click", handleRemoveInactiveSessions);
     if (sessionsTableBody) sessionsTableBody.addEventListener("click", handleRevokeSessionClick);
   } catch (error) {
     console.error("settings init failed", error);

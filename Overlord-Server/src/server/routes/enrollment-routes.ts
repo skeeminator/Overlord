@@ -16,6 +16,18 @@ import { logAudit, AuditAction } from "../../auditLog";
 import * as clientManager from "../../clientManager";
 import { setOnlineState } from "../../db";
 import { requirePermission } from "../../rbac";
+import { getUserClientAccessScope, setUserClientAccessScope, setUserClientAccessRule } from "../../users";
+
+function grantClientAccess(userId: number, role: string, clientId: string): void {
+  if (role === "admin") return;
+  const currentScope = getUserClientAccessScope(userId);
+  if (currentScope === "none") {
+    setUserClientAccessScope(userId, "allowlist");
+  }
+  if (currentScope === "none" || currentScope === "allowlist") {
+    setUserClientAccessRule(userId, clientId, "allow");
+  }
+}
 
 function getClientScopeFilters(userId: number, role: string): {
   allowedClientIds?: string[];
@@ -117,6 +129,8 @@ export async function handleEnrollmentRoutes(
     }
 
     setClientEnrollmentStatus(clientId, "approved", user.username);
+
+    grantClientAccess(user.userId, user.role, clientId);
 
     _postApproveHook?.(clientId);
 
@@ -261,6 +275,7 @@ export async function handleEnrollmentRoutes(
       if (ok) {
         updated++;
         if (action === "approve") {
+          grantClientAccess(user.userId, user.role, id);
           _postApproveHook?.(id);
         }
       }

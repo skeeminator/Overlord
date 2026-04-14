@@ -596,9 +596,19 @@
             </div>
 
             <div id="build-results" class="mt-4 hidden">
-              <h3 class="font-medium mb-2 flex items-center gap-2">
-                <i class="fa-solid fa-download"></i> Built Clients
-              </h3>
+              <div class="flex items-center justify-between mb-2">
+                <h3 class="font-medium flex items-center gap-2">
+                  <i class="fa-solid fa-download"></i> Built Clients
+                </h3>
+                <button
+                  id="toggle-all-builds-btn"
+                  class="hidden inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs transition-colors"
+                  type="button"
+                >
+                  <i class="fa-solid fa-eye"></i>
+                  <span id="toggle-all-builds-label">Show All</span>
+                </button>
+              </div>
               <div id="build-files" class="flex flex-col gap-2"></div>
             </div>
           </div>

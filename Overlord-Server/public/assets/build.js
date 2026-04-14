@@ -19,6 +19,7 @@ const solMemoCheckbox = document.getElementById("sol-memo");
 const solSettings = document.getElementById("sol-settings");
 
 let currentServerVersion = null;
+let currentUserRole = null;
 
 async function loadServerVersion() {
   try {
@@ -96,7 +97,6 @@ function saveFormSettings() {
       solMemo: document.getElementById("sol-memo")?.checked ?? false,
       solAddress: document.getElementById("sol-address")?.value ?? "",
       solRpcEndpoints: document.getElementById("sol-rpc-endpoints")?.value ?? "",
-      outputName: document.getElementById("output-name")?.value ?? "",
       mutex: document.getElementById("mutex")?.value ?? "",
       disableMutex: document.querySelector('input[name="disable-mutex"]')?.checked ?? false,
       stripDebug: document.querySelector('input[name="strip-debug"]')?.checked ?? true,
@@ -148,7 +148,6 @@ function restoreFormSettings() {
     if (s.solMemo !== undefined) setCb("#sol-memo", s.solMemo);
     if (s.solAddress !== undefined) setVal("sol-address", s.solAddress);
     if (s.solRpcEndpoints !== undefined) setVal("sol-rpc-endpoints", s.solRpcEndpoints);
-    if (s.outputName !== undefined) setVal("output-name", s.outputName);
     if (s.mutex !== undefined) setVal("mutex", s.mutex);
     if (s.disableMutex !== undefined) setCb('input[name="disable-mutex"]', s.disableMutex);
     if (s.stripDebug !== undefined) setCb('input[name="strip-debug"]', s.stripDebug);
@@ -829,6 +828,7 @@ async function init() {
     }
 
     const data = await res.json();
+    currentUserRole = data.role;
     usernameDisplay.textContent = data.username;
 
     const roleBadges = {
@@ -886,6 +886,20 @@ async function init() {
 
     await loadServerVersion();
     await loadSavedBuilds();
+
+    const toggleAllBuildsBtn = document.getElementById("toggle-all-builds-btn");
+    const toggleAllBuildsLabel = document.getElementById("toggle-all-builds-label");
+    if (toggleAllBuildsBtn && currentUserRole === "admin") {
+      toggleAllBuildsBtn.classList.remove("hidden");
+      toggleAllBuildsBtn.addEventListener("click", async () => {
+        showAllBuilds = !showAllBuilds;
+        if (toggleAllBuildsLabel) {
+          toggleAllBuildsLabel.textContent = showAllBuilds ? "My Builds" : "Show All";
+        }
+        buildFilesDiv.innerHTML = "";
+        await loadSavedBuilds();
+      });
+    }
   } catch (err) {
     console.error("Failed to fetch user info:", err);
     window.location.href = "/";
@@ -1431,9 +1445,12 @@ function removeBuildFromStorage(buildId) {
   }
 }
 
+let showAllBuilds = false;
+
 async function loadSavedBuilds() {
   try {
-    const res = await fetch("/api/build/list", {
+    const queryParam = showAllBuilds && currentUserRole === "admin" ? "?all=true" : "";
+    const res = await fetch(`/api/build/list${queryParam}`, {
       credentials: "include",
     });
 

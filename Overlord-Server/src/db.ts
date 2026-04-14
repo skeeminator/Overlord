@@ -1005,6 +1005,94 @@ export function getClientMetricsSummary(): ClientMetricsSummary {
   };
 }
 
+export function getClientMetricsSummaryForUser(userId: number): ClientMetricsSummary {
+  const filter = `WHERE built_by_user_id = ?`;
+
+  const counts = db
+    .query<{ total: number; online: number }>(
+      `SELECT COUNT(*) as total, SUM(CASE WHEN online=1 THEN 1 ELSE 0 END) as online FROM clients ${filter}`,
+    )
+    .get(userId) ?? { total: 0, online: 0 };
+
+  const osRows = db
+    .query<{ key: string; total: number; online: number }>(
+      `SELECT
+         COALESCE(NULLIF(os, ''), 'unknown') as key,
+         COUNT(*) as total,
+         SUM(CASE WHEN online=1 THEN 1 ELSE 0 END) as online
+       FROM clients ${filter}
+       GROUP BY COALESCE(NULLIF(os, ''), 'unknown')`,
+    )
+    .all(userId);
+
+  const countryRows = db
+    .query<{ key: string; total: number; online: number }>(
+      `SELECT
+         COALESCE(NULLIF(country, ''), 'ZZ') as key,
+         COUNT(*) as total,
+         SUM(CASE WHEN online=1 THEN 1 ELSE 0 END) as online
+       FROM clients ${filter}
+       GROUP BY COALESCE(NULLIF(country, ''), 'ZZ')`,
+    )
+    .all(userId);
+
+  const byOS: Record<string, number> = {};
+  const byOSOnline: Record<string, number> = {};
+  for (const row of osRows) {
+    byOS[row.key] = Number(row.total) || 0;
+    byOSOnline[row.key] = Number(row.online) || 0;
+  }
+
+  const byCountry: Record<string, number> = {};
+  const byCountryOnline: Record<string, number> = {};
+  for (const row of countryRows) {
+    byCountry[row.key] = Number(row.total) || 0;
+    byCountryOnline[row.key] = Number(row.online) || 0;
+  }
+
+  return {
+    total: Number(counts.total) || 0,
+    online: Number(counts.online) || 0,
+    byOS,
+    byCountry,
+    byOSOnline,
+    byCountryOnline,
+  };
+}
+
+export function countBuildsForUser(userId: number): number {
+  const row = db
+    .query<{ c: number }>(`SELECT COUNT(*) as c FROM builds WHERE built_by_user_id = ?`)
+    .get(userId);
+  return row?.c ?? 0;
+}
+
+export function getOldestBuildForUser(userId: number): BuildRecord | null {
+  const row = db
+    .query<any>(`SELECT * FROM builds WHERE built_by_user_id = ? ORDER BY start_time ASC LIMIT 1`)
+    .get(userId);
+  if (!row) return null;
+  return {
+    id: row.id,
+    status: row.status,
+    startTime: row.start_time,
+    expiresAt: row.expires_at,
+    files: JSON.parse(row.files),
+    buildTag: row.build_tag || undefined,
+    builtByUserId: row.built_by_user_id || undefined,
+  };
+}
+
+export function deleteInactiveSessions(userId: number): number {
+  const now = Math.floor(Date.now() / 1000);
+  const result = db.run(
+    `DELETE FROM sessions WHERE user_id = ? AND (revoked = 1 OR expires_at <= ?)`,
+    userId,
+    now,
+  );
+  return result.changes;
+}
+
 export type AutoScriptTrigger = "on_connect" | "on_first_connect" | "on_connect_once";
 
 export type AutoScript = {

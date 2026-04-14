@@ -4,7 +4,7 @@ import { authenticateRequest } from "../../auth";
 import { AuditAction, logAudit } from "../../auditLog";
 import * as buildManager from "../../build/buildManager";
 import * as clientManager from "../../clientManager";
-import { deleteBuild, getAllBuilds, getBuild } from "../../db";
+import { deleteBuild, getAllBuilds, getBuild, countBuildsForUser, getOldestBuildForUser } from "../../db";
 import { encodeMessage } from "../../protocol";
 import { metrics } from "../../metrics";
 import { requirePermission } from "../../rbac";
@@ -180,6 +180,30 @@ export async function handleBuildRoutes(
       const buildId = uuidv4();
       const ip = server.requestIP(req)?.address || "unknown";
 
+      // Enforce max 10 builds per user — auto-delete oldest when limit exceeded
+      const MAX_BUILDS_PER_USER = 10;
+      const currentCount = countBuildsForUser(user.userId);
+      if (currentCount >= MAX_BUILDS_PER_USER) {
+        const oldest = getOldestBuildForUser(user.userId);
+        if (oldest) {
+          if (oldest.files) {
+            const rootDir = resolveRuntimeRoot();
+            const outDir = path.join(rootDir, "dist-clients");
+            for (const file of oldest.files) {
+              try {
+                const fp = path.join(outDir, file.filename);
+                if (fs.existsSync(fp)) {
+                  fs.unlinkSync(fp);
+                }
+              } catch {}
+            }
+          }
+          buildManager.deleteBuildStream(oldest.id);
+          deleteBuild(oldest.id);
+          logger.info(`[build:limit] Auto-deleted oldest build ${oldest.id.substring(0, 8)} for user ${user.username} (limit: ${MAX_BUILDS_PER_USER})`);
+        }
+      }
+
       logAudit({
         timestamp: Date.now(),
         username: user.username,
@@ -324,7 +348,10 @@ export async function handleBuildRoutes(
     if (req.method === "GET" && url.pathname === "/api/build/list") {
       requirePermission(user, "clients:build");
 
-      const builds = getAllBuilds(user.userId, user.role);
+      const showAll = url.searchParams.get("all") === "true" && user.role === "admin";
+      const builds = showAll
+        ? getAllBuilds(undefined, "admin")
+        : getAllBuilds(user.userId, user.role === "admin" ? "operator" : user.role);
       return Response.json({ builds });
     }
 

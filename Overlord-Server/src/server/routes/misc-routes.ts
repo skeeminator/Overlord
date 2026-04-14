@@ -1,7 +1,7 @@
 import { authenticateRequest } from "../../auth";
 import { AuditAction, getAuditLogs, logAudit } from "../../auditLog";
 import { getConfig, updateSecurityConfig, updateTlsConfig, updateAppearanceConfig, getExportableConfig, importFullConfig } from "../../config";
-import { getClientMetricsSummary } from "../../db";
+import { getClientMetricsSummary, getClientMetricsSummaryForUser } from "../../db";
 import { metrics } from "../../metrics";
 import { requirePermission } from "../../rbac";
 import { getUserTelegramChatId, setUserTelegramChatId, getUserClientAccessScope, listUserClientRuleIdsByAccess } from "../../users";
@@ -40,7 +40,9 @@ export async function handleMiscRoutes(
 
     const snapshot = metrics.getSnapshot();
 
-    const clientSummary = getClientMetricsSummary();
+    const clientSummary = user.role === "admin"
+      ? getClientMetricsSummary()
+      : getClientMetricsSummaryForUser(user.userId);
     snapshot.clients.total = clientSummary.total;
     snapshot.clients.online = clientSummary.online;
     snapshot.clients.offline = clientSummary.total - clientSummary.online;
