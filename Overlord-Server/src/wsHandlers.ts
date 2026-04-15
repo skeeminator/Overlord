@@ -11,6 +11,12 @@ import {
 import { upsertClientRow } from "./db";
 import { metrics } from "./metrics";
 
+/** Strip control chars and clamp length on client-supplied info strings. */
+function sanitizeInfoString(val: unknown, maxLen = 256): string | undefined {
+  if (typeof val !== "string") return undefined;
+  return val.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "").slice(0, maxLen);
+}
+
 const MAX_PING_RTT_MS = 15_000;
 const CLIENT_DB_SYNC_INTERVAL_MS = Number(process.env.OVERLORD_CLIENT_DB_SYNC_MS || 5000);
 const lastClientDbSync = new Map<string, number>();
@@ -80,23 +86,23 @@ export function handleHello(
   if (ip) {
     info.ip = ip;
   }
-  info.hwid = (payload as any).hwid as string | undefined;
-  info.host = payload.host;
-  info.os = payload.os;
-  info.arch = payload.arch;
-  info.version = payload.version;
-  info.user = payload.user;
+  info.hwid = sanitizeInfoString((payload as any).hwid);
+  info.host = sanitizeInfoString(payload.host);
+  info.os = sanitizeInfoString(payload.os);
+  info.arch = sanitizeInfoString(payload.arch, 32);
+  info.version = sanitizeInfoString(payload.version, 64);
+  info.user = sanitizeInfoString(payload.user);
   info.monitors = payload.monitors;
   info.monitorInfo = (payload as any).monitorInfo || info.monitorInfo;
   info.inMemory = !!(payload as any).inMemory;
   info.isAdmin = !!(payload as any).isAdmin;
-  info.elevation = typeof (payload as any).elevation === "string" ? (payload as any).elevation : info.elevation;
+  info.elevation = sanitizeInfoString((payload as any).elevation, 32) ?? info.elevation;
   if ((payload as any).permissions && typeof (payload as any).permissions === "object") {
     info.permissions = (payload as any).permissions;
   }
-  info.cpu = (payload as any).cpu || info.cpu;
-  info.gpu = (payload as any).gpu || info.gpu;
-  info.ram = (payload as any).ram || info.ram;
+  info.cpu = sanitizeInfoString((payload as any).cpu) || info.cpu;
+  info.gpu = sanitizeInfoString((payload as any).gpu) || info.gpu;
+  info.ram = sanitizeInfoString((payload as any).ram, 64) || info.ram;
   const geo = ip ? geoip.lookup(ip) : undefined;
   const countryRaw =
     geo?.country || (payload as any).country || info.country || "ZZ";

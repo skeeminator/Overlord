@@ -537,7 +537,7 @@ async function startServer() {
     takePendingNotificationScreenshot: takePendingNotificationScreenshotForClient,
     storeNotificationScreenshot: storeNotificationScreenshotForPending,
     handleNotificationScreenshotResult: notificationPluginHandlers.handleNotificationScreenshotResult,
-    handleConsoleOutput,
+    handleConsoleOutput: (clientId: string, payload: any) => handleConsoleOutput(clientId, payload),
     handleFileBrowserMessage: (clientId: string, payload: any) =>
       forwardFileBrowserMessage(clientId, payload, {
         pendingHttpDownloads,

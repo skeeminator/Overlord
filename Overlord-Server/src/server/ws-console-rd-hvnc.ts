@@ -911,11 +911,12 @@ export function handleConsoleViewerMessage(ws: ServerWebSocket<SocketData>, raw:
   }
 }
 
-export function handleConsoleOutput(payload: any) {
+export function handleConsoleOutput(clientId: string, payload: any) {
   const sessionId = payload.sessionId as string;
   if (!sessionId) return;
   const session = sessionManager.getConsoleSession(sessionId);
   if (!session) return;
+  if (session.clientId !== clientId) return;
   const data = payload.data ? textDecoder.decode(payload.data as Uint8Array) : "";
   safeSendViewer(session.viewer, {
     type: "output",

@@ -65,7 +65,7 @@ type WsLifecycleDeps = {
     height?: number,
   ) => void;
   handleNotificationScreenshotResult: (clientId: string, payload: any) => void;
-  handleConsoleOutput: (payload: any) => void;
+  handleConsoleOutput: (clientId: string, payload: any) => void;
   handleFileBrowserMessage: (clientId: string, payload: any) => void;
   handleProxyTunnelData: (clientId: string, connectionId: string, data: Uint8Array) => void;
   handleProxyTunnelClose: (clientId: string, connectionId: string) => void;
@@ -290,20 +290,24 @@ export async function handleWebSocketMessage(
           const countryRaw = geo?.country || (payload as any).country || "ZZ";
           const country = /^[A-Z]{2}$/i.test(countryRaw) ? countryRaw.toUpperCase() : "ZZ";
 
+          const _s = (v: unknown, max = 256): string | undefined => {
+            if (typeof v !== "string") return undefined;
+            return v.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "").slice(0, max);
+          };
           upsertClientRow({
             id: resolvedId,
-            hwid: (payload as any).hwid || resolvedId,
+            hwid: _s((payload as any).hwid) || resolvedId,
             role: "client",
             ip: ip || undefined,
-            host: (payload as any).host || undefined,
-            os: (payload as any).os || undefined,
-            arch: (payload as any).arch || undefined,
-            version: (payload as any).version || undefined,
-            user: (payload as any).user || undefined,
+            host: _s((payload as any).host),
+            os: _s((payload as any).os),
+            arch: _s((payload as any).arch, 32),
+            version: _s((payload as any).version, 64),
+            user: _s((payload as any).user),
             monitors: (payload as any).monitors || undefined,
-            cpu: (payload as any).cpu || undefined,
-            gpu: (payload as any).gpu || undefined,
-            ram: (payload as any).ram || undefined,
+            cpu: _s((payload as any).cpu),
+            gpu: _s((payload as any).gpu),
+            ram: _s((payload as any).ram, 64),
             country,
             lastSeen: Date.now(),
             online: 0 as any,
@@ -319,17 +323,17 @@ export async function handleWebSocketMessage(
           deps.notifyDashboard();
           deps.notifyDashboardClientEvent("client_purgatory", {
             id: resolvedId,
-            host: (payload as any).host || undefined,
-            user: (payload as any).user || undefined,
-            os: (payload as any).os || undefined,
+            host: _s((payload as any).host),
+            user: _s((payload as any).user),
+            os: _s((payload as any).os),
             ip: ip || undefined,
             country,
           });
           deps.broadcastClientEvent("client_purgatory", {
             id: resolvedId,
-            host: (payload as any).host || undefined,
-            user: (payload as any).user || undefined,
-            os: (payload as any).os || undefined,
+            host: _s((payload as any).host),
+            user: _s((payload as any).user),
+            os: _s((payload as any).os),
             ip: ip || undefined,
             country,
           });
@@ -468,7 +472,7 @@ export async function handleWebSocketMessage(
         deps.handleNotificationScreenshotResult(client.id, payload);
         break;
       case "console_output":
-        deps.handleConsoleOutput(payload);
+        deps.handleConsoleOutput(client.id, payload);
         break;
       case "file_list_result":
       case "file_download":
