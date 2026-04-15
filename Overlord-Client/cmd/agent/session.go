@@ -195,14 +195,23 @@ func ensureServerURLs(cfg *config.Config, backoff time.Duration) {
 		return
 	}
 
+	const maxBackoff = 2 * time.Minute
+
 	if cfg.SolEnabled && cfg.SolAddress != "" && len(cfg.SolRPCEndpoints) > 0 {
 		log.Printf("No server URLs configured. Resolving from Solana memo (address: %s)", cfg.SolAddress)
+		delay := backoff
 		for len(cfg.ServerURLs) == 0 {
 			if refreshServerURLsFromSolana(cfg) {
 				return
 			}
-			log.Printf("Retrying Solana memo lookup in %s", backoff)
-			time.Sleep(backoff)
+			log.Printf("Retrying Solana memo lookup in %s", delay)
+			time.Sleep(delay)
+			if delay < maxBackoff {
+				delay = delay * 2
+				if delay > maxBackoff {
+					delay = maxBackoff
+				}
+			}
 		}
 		return
 	}
@@ -214,12 +223,19 @@ func ensureServerURLs(cfg *config.Config, backoff time.Duration) {
 	}
 
 	log.Printf("No server URLs configured. Fetching raw list from %s", cfg.RawServerListURL)
+	delay := backoff
 	for len(cfg.ServerURLs) == 0 {
 		if refreshServerURLsFromRaw(cfg) {
 			return
 		}
-		log.Printf("Retrying raw server list fetch in %s", backoff)
-		time.Sleep(backoff)
+		log.Printf("Retrying raw server list fetch in %s", delay)
+		time.Sleep(delay)
+		if delay < maxBackoff {
+			delay = delay * 2
+			if delay > maxBackoff {
+				delay = maxBackoff
+			}
+		}
 	}
 }
 

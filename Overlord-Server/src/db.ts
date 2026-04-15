@@ -491,7 +491,7 @@ export function upsertClientRow(
        ping_ms=COALESCE(excluded.ping_ms, clients.ping_ms),
       build_tag=COALESCE(excluded.build_tag, clients.build_tag),
       built_by_user_id=COALESCE(excluded.built_by_user_id, clients.built_by_user_id),
-       enrollment_status=CASE WHEN excluded.enrollment_status <> 'pending' THEN excluded.enrollment_status ELSE clients.enrollment_status END,
+       enrollment_status=CASE WHEN excluded.enrollment_status <> 'pending' THEN excluded.enrollment_status ELSE COALESCE(clients.enrollment_status, 'pending') END,
        public_key=COALESCE(excluded.public_key, clients.public_key),
        key_fingerprint=COALESCE(excluded.key_fingerprint, clients.key_fingerprint),
        cpu=COALESCE(excluded.cpu, clients.cpu),

