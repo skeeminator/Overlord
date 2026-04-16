@@ -23,8 +23,6 @@
 #include "MinHook.h"
 #include "DXGICapture.h"
 
-#pragma comment(lib, "libMinHook.x64.lib")
-
 #ifdef __cplusplus
 extern "C" {
 #endif
