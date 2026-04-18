@@ -159,6 +159,8 @@ jobs:
           exit-code: '1'
           ignore-unfixed: true
           vuln-type: os,library
+          scanners: vuln
+          limit-severities-for-sarif: true
 
       - name: Upload Trivy scan results to GitHub Security
         if: always()
