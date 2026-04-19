@@ -71,6 +71,8 @@ export async function loadWithOptions(options = {}) {
     }
     state.lastDigest = digest;
     render(data, { reorder });
+    const pag = document.getElementById("pagination");
+    if (pag) pag.style.visibility = "";
     
     if (!state.thumbnailsRequested) {
       state.thumbnailsRequested = true;

@@ -13,7 +13,10 @@
     <link rel="icon" type="image/x-icon" href="/assets/favicon.ico" />
     <link rel="stylesheet" href="/assets/main.css" />
     <link rel="stylesheet" href="/assets/custom.css" />
-    <script src="/vendor/animejs/anime.min.js"></script>
+    <script defer src="/vendor/animejs/anime.min.js"></script>
+    <link rel="preload" href="/api/clients?page=1&amp;pageSize=12&amp;q=&amp;sort=stable&amp;status=all&amp;os=all&amp;country=all&amp;group=all" as="fetch" crossorigin />
+    <link rel="preload" href="/api/auth/me" as="fetch" crossorigin />
+    <link rel="preload" href="/api/groups" as="fetch" crossorigin />
   </head>
   <body class="min-h-screen bg-slate-950 text-slate-100">
     <header id="top-nav"></header>
@@ -151,8 +154,8 @@
             </button>
           </div>
         </div>
-        <div id="grid" class="flex flex-col gap-3"></div>
-        <div class="flex items-center justify-center gap-3 py-4">
+        <div id="grid" class="flex flex-col gap-3 min-h-[420px]"></div>
+        <div id="pagination" class="flex items-center justify-center gap-3 py-4" style="visibility:hidden">
           <button
             id="prev"
             class="px-4 py-2 rounded-lg border border-slate-700/60 bg-slate-800/70 hover:bg-slate-700/70 text-slate-300 disabled:opacity-40"

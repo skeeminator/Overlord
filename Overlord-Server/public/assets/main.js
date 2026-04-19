@@ -11,7 +11,6 @@ import {
   requestThumbnail,
   markManualDisconnect,
 } from "./data.js";
-import { initCountryPicker } from "./country-picker.js";
 
 const grid = document.getElementById("grid");
 const totalPill = document.getElementById("total-pill");
@@ -620,13 +619,15 @@ filterGroupSelect?.addEventListener("change", (e) => {
   loadWithOptions({ force: true, reorder: true });
 });
 
-initCountryPicker((code) => {
-  state.filterCountry = code;
-  localStorage.setItem(PREF_FILTER_COUNTRY_KEY, code);
-  state.page = 1;
-  state.lastDigest = "";
-  loadWithOptions({ force: true, reorder: true });
-}, localStorage.getItem(PREF_FILTER_COUNTRY_KEY) || "all");
+import("./country-picker.js").then(({ initCountryPicker }) => {
+  initCountryPicker((code) => {
+    state.filterCountry = code;
+    localStorage.setItem(PREF_FILTER_COUNTRY_KEY, code);
+    state.page = 1;
+    state.lastDigest = "";
+    loadWithOptions({ force: true, reorder: true });
+  }, localStorage.getItem(PREF_FILTER_COUNTRY_KEY) || "all");
+});
 
 (function restoreFilterStatus() {
   const savedStatus = localStorage.getItem(PREF_FILTER_STATUS_KEY);
