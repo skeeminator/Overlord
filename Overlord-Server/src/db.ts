@@ -194,6 +194,18 @@ try { db.run(`ALTER TABLE builds ADD COLUMN built_by_user_id INTEGER`); } catch 
 db.run(`CREATE INDEX IF NOT EXISTS idx_builds_build_tag ON builds(build_tag);`);
 
 db.run(`
+  CREATE TABLE IF NOT EXISTS build_profiles (
+    user_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    profile_json TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (user_id, name)
+  );
+`);
+db.run(`CREATE INDEX IF NOT EXISTS idx_build_profiles_user_updated ON build_profiles(user_id, updated_at DESC);`);
+
+db.run(`
   CREATE TABLE IF NOT EXISTS notification_screenshots (
     id TEXT PRIMARY KEY,
     notification_id TEXT NOT NULL,
@@ -1458,6 +1470,57 @@ export function setClientBookmark(id: string, bookmarked: boolean): boolean {
 export function getClientBookmark(id: string): boolean {
   const row = db.query<{ bookmarked: number }>(`SELECT bookmarked FROM clients WHERE id=?`).get(id);
   return row?.bookmarked === 1;
+}
+
+export interface BuildProfileRecord {
+  userId: number;
+  name: string;
+  profileJson: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export function listBuildProfilesForUser(userId: number): BuildProfileRecord[] {
+  return db
+    .query<any>(
+      `SELECT user_id, name, profile_json, created_at, updated_at
+       FROM build_profiles
+       WHERE user_id = ?
+       ORDER BY updated_at DESC, name ASC`,
+    )
+    .all(userId)
+    .map((row: any) => ({
+      userId: row.user_id,
+      name: row.name,
+      profileJson: row.profile_json,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }));
+}
+
+export function saveBuildProfileForUser(userId: number, name: string, profileJson: string): void {
+  const now = Date.now();
+  db.run(
+    `INSERT INTO build_profiles (user_id, name, profile_json, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(user_id, name) DO UPDATE SET
+       profile_json = excluded.profile_json,
+       updated_at = excluded.updated_at`,
+    userId,
+    name,
+    profileJson,
+    now,
+    now,
+  );
+}
+
+export function deleteBuildProfileForUser(userId: number, name: string): boolean {
+  const result = db.run(
+    `DELETE FROM build_profiles WHERE user_id = ? AND name = ?`,
+    userId,
+    name,
+  );
+  return ((result as any)?.changes || 0) > 0;
 }
 
 export interface BuildRecord {
