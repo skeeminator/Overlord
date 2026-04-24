@@ -1,32 +1,50 @@
-function addRippleEffect(element) {
-  element.classList.add("ripple");
+(() => {
+  if (window.__overlordRippleInitialized) {
+    return;
+  }
+  window.__overlordRippleInitialized = true;
 
-  element.addEventListener("click", function (e) {
-    this.classList.remove("ripple-active");
+  function addRippleEffect(element) {
+    if (!element || element.dataset.rippleBound === "1") {
+      return;
+    }
 
-    const rect = this.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    element.classList.add("ripple");
+    element.dataset.rippleBound = "1";
 
-    this.style.setProperty("--x", x + "px");
-    this.style.setProperty("--y", y + "px");
-
-    void this.offsetWidth;
-
-    this.classList.add("ripple-active");
-
-    setTimeout(() => {
+    element.addEventListener("click", function (e) {
       this.classList.remove("ripple-active");
-    }, 600);
-  });
-}
 
-document.addEventListener("DOMContentLoaded", () => {
-  document
-    .querySelectorAll("button:not(.no-ripple), .button:not(.no-ripple)")
-    .forEach((btn) => {
-      addRippleEffect(btn);
+      const rect = this.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+
+      this.style.setProperty("--x", x + "px");
+      this.style.setProperty("--y", y + "px");
+
+      void this.offsetWidth;
+
+      this.classList.add("ripple-active");
+
+      setTimeout(() => {
+        this.classList.remove("ripple-active");
+      }, 600);
     });
-});
+  }
 
-window.addRippleEffect = addRippleEffect;
+  function initRippleEffects() {
+    document
+      .querySelectorAll("button:not(.no-ripple), .button:not(.no-ripple)")
+      .forEach((btn) => {
+        addRippleEffect(btn);
+      });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initRippleEffects, { once: true });
+  } else {
+    initRippleEffects();
+  }
+
+  window.addRippleEffect = addRippleEffect;
+})();
